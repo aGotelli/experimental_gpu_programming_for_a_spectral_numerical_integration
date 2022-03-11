@@ -10,6 +10,11 @@ set(CMAKE_BUILD_TYPE Debug)
 
 find_package(Eigen3 3.4 REQUIRED NO_MODULE)
 
-add_executable(spectral_integration main.cpp)
+include_directories(include)
+
+
+add_executable(spectral_integration main.cpp
+                                    include/chebyshev_differentiation.h
+                                    include/spectral_integration_utilities.h)
 target_link_libraries(spectral_integration Eigen3::Eigen)
 
