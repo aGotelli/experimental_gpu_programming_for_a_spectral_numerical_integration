@@ -14,13 +14,11 @@
  * \return The basis matrix Phi for a given X
  */
 template<unsigned int t_na, unsigned int t_ne>
-static const Eigen::MatrixXd Phi(const double t_X)
+static const Eigen::MatrixXd Phi(const double t_X, const double &t_begin=0, const double &t_end=1)
 {
 
     //  The coordinate must be transposed into the Chebyshev domain [-1, 1];
-    const double min = 0;
-    const double max = 1;
-    double x = ( 2 * t_X - ( max + min) ) / ( max - min );
+    double x = ( 2 * t_X - ( t_end + t_begin) ) / ( t_end - t_begin );
 
     //  Compute the values of the polynomial for every element of the strain field
     Eigen::Matrix<double, t_ne, 1> Phi_i;
@@ -62,9 +60,9 @@ static Eigen::MatrixXd getP()
 
     const unsigned int problem_dimension = t_state_dimension * t_number_of_chebyshev_nodes;
 
+
     //  Initialization as Identity matrix
-    Eigen::Matrix<double, problem_dimension, problem_dimension> P =
-            Eigen::Matrix<double, problem_dimension, problem_dimension>::Identity();
+    Eigen::MatrixXd P = Eigen::MatrixXd::Identity(problem_dimension, problem_dimension);
 
     //  Start applying mapping principles
     P(idxY,idxY) << Eigen::MatrixXd::Zero(idxY.rows(),
@@ -76,6 +74,8 @@ static Eigen::MatrixXd getP()
 
     return P;
 }
+
+
 
 
 
