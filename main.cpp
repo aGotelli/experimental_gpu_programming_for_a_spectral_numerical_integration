@@ -15,11 +15,12 @@
 
 
 
+
 template<unsigned int t_ny, unsigned int t_N, unsigned int t_ns, unsigned int t_L, unsigned int na, unsigned int ne>
 Eigen::MatrixXd getA(Eigen::VectorXd &t_qe)
 {
     //  Define the Chebyshev points on the unit circle
-    const auto x = ComputeChebyshevPoints<t_N>();
+    const auto x = ComputeChebyshevPoints<t_N+1>();
 
 
 
@@ -94,7 +95,7 @@ int main()
     //  Dimension of the state
     constexpr unsigned int state_dimension = Y0.rows();
     //  Number of Chebyshev nodes
-    constexpr unsigned int number_of_chebyshev_nodes = 11;
+    constexpr unsigned int number_of_chebyshev_nodes = 29;
     //  Problem size is the total number of elements
     constexpr unsigned int prob_dimension = state_dimension * number_of_chebyshev_nodes;
     //  The subset of unknows in the problem
