@@ -19,11 +19,7 @@ template<unsigned int t_ny, unsigned int t_N, unsigned int t_ns, unsigned int t_
 Eigen::MatrixXd getA(Eigen::VectorXd &t_qe)
 {
     //  Define the Chebyshev points on the unit circle
-    std::vector<double> x(t_N+1);
-
-    for(unsigned int j=0; j<=t_N;j++) {
-        x[j] = (static_cast<double>(t_L)/2)*(1 +cos( M_PI * static_cast<double>(j) / static_cast<double>(t_N) ));
-    }
+    const auto x = ComputeChebyshevPoints<t_N>();
 
 
 
