@@ -6,146 +6,13 @@
 #include <fstream>
 
 
-#include <boost/math/special_functions/chebyshev.hpp>
 
 #include <Eigen/Dense>
-#include <unsupported/Eigen/KroneckerProduct>
-#include <Eigen/Core>
 
 
-/*!
- * \brief getDn Computes the Chebyshev differentiation matrix
- * \tparam t_N The number of Chebyshev points.
- * \return The Chebyshev differentiation matrix
- */
-template<unsigned int t_N>
-static Eigen::MatrixXd getDn()
-{
-    Eigen::MatrixXd DN(t_N+1, t_N+1);
+#include "chebyshev_differentiation.h"
+#include "spectral_integration_utilities.h"
 
-    //  Define the integration lenght (default will be 1, undimensional)
-    const double L = 1.0;
-
-
-
-    //  Define the Chebyshev points on the unit circle
-    std::vector<double> x(t_N+1);
-    unsigned int j = 0;
-    std::generate(x.begin(), x.end(), [&](){
-        return (L/2)*(1 +cos( M_PI * static_cast<double>(j++) / static_cast<double>(t_N) ));
-    });
-
-
-    //  Create a matrix every row filled with a point value
-    Eigen::MatrixXd X(t_N+1, t_N+1);
-    for(unsigned int i=0; i<=t_N;i++) {
-        for(unsigned int j=0; j<=t_N;j++) {
-            X(i,j) = x[i];
-        }
-    }
-
-
-
-
-    std::vector<double> c(t_N+1);
-
-    for(unsigned int i=0; i<=t_N;i++) {
-        unsigned int ci;
-        if(i==0 or i==t_N)
-            ci = 2;
-        else ci=1;
-        c[i] = pow(-1, i)*ci;
-    }
-
-
-    Eigen::MatrixXd C(t_N+1, t_N+1);
-    for(unsigned int i=0; i<=t_N;i++) {
-        for(unsigned int j=0; j<=t_N;j++) {
-            C(i,j) = c[i]*(1/c[j]);
-        }
-    }
-
-    //  Definition of the temporary matrix A
-    Eigen::MatrixXd A(t_N+1, t_N+1);
-    A = X - X.transpose() + Eigen::MatrixXd::Identity(t_N+1, t_N+1);
-
-    //  Obtain off diagonal element of DN
-    for(unsigned int i=0; i<=t_N;i++) {
-        for(unsigned int j=0; j<=t_N;j++) {
-            DN(i,j) = C(i, j) / A(i, j);
-        }
-    }
-
-
-    Eigen::VectorXd row_sum = Eigen::VectorXd::Zero(t_N+1);
-
-    //  Sum every row of Dn
-    for(unsigned int i=0; i<=t_N;i++) {
-        for(unsigned int j=0; j<=t_N;j++) {
-            row_sum[i] += DN(i, j);
-        }
-    }
-
-    //  Correct the dyagonal element
-    for(unsigned int i=0; i<=t_N;i++) {
-        DN(i, i) -= row_sum[i];
-    }
-
-
-    return DN;
-}
-
-
-template<unsigned int na, unsigned int ne>
-static const Eigen::MatrixXd Phi(const double t_s, const double t_L=1.0){
-
-    //  Normalize the cenerline coordinates
-    const double X = t_s/t_L;
-
-    //  Compute the values of the polynomial for every element of the strain field
-    Eigen::VectorXd Base(ne);
-    for(unsigned int i=0; i<ne; i++)
-        Base[i] = boost::math::chebyshev_t(i, X);
-
-
-    //  Define the matrix of bases
-    const Eigen::Matrix<double, na, ne*na> Phi = Eigen::KroneckerProduct(Eigen::MatrixXd::Identity(na, na), Base.transpose());
-
-
-return Phi;
-}
-
-template<unsigned int t_ny, unsigned int t_N, unsigned int t_ns>
-Eigen::MatrixXd getP()
-{
-
-    //  Define a vector of index from 1 to t_ny
-    Eigen::VectorXi idxY(t_ny);
-    unsigned int i=0;
-    for(auto& index : idxY)
-        index = ++i;
-
-    //  Now the index for the first element of each vector
-    //  needs to skyp number of chebyshev points
-    Eigen::VectorXi idxX0 = idxY * t_N;
-
-    //  Report them back to C++ correct indexing
-    idxY -= Eigen::VectorXi::Ones(t_ny);
-    idxX0 -= Eigen::VectorXi::Ones(t_ny);
-
-    //  Initialization as Identity matrix
-    Eigen::MatrixXd P = Eigen::MatrixXd::Identity(t_ns, t_ns);
-
-    //  Start applying mapping principles
-    P(idxY,idxY) << Eigen::MatrixXd::Zero(idxY.rows(),
-                                         idxY.rows());
-    P(idxX0,idxX0) = Eigen::MatrixXd::Zero(idxX0.rows(),
-                                           idxX0.rows());
-    P(idxY,idxX0) = Eigen::MatrixXd::Identity(t_ny, t_ny);
-    P(idxX0,idxY) = Eigen::MatrixXd::Identity(t_ny, t_ny);
-
-    return P;
-}
 
 
 template<unsigned int t_ny, unsigned int t_N, unsigned int t_ns, unsigned int t_L, unsigned int na, unsigned int ne>
@@ -282,8 +149,8 @@ int main()
  *
  */
 
-    const MatrixNpNp  P = getP<state_dimension, number_of_chebyshev_nodes, prob_dimension>();
-    const MatrixNchebNcheb Dn = getDn<number_of_chebyshev_nodes-1>();
+    const MatrixNpNp  P = getP<state_dimension, number_of_chebyshev_nodes>();
+    const MatrixNchebNcheb Dn = getDn<number_of_chebyshev_nodes>();
     const MatrixNpNp D = Eigen::KroneckerProduct(Eigen::MatrixXd::Identity(state_dimension, state_dimension), Dn);
 
 /*  In this part we compute the matrix A and the vector b.
