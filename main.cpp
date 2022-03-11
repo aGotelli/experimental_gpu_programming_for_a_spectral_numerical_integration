@@ -15,20 +15,28 @@
 
 
 
-
-template<unsigned int t_ny, unsigned int t_N, unsigned int t_ns, unsigned int t_L, unsigned int na, unsigned int ne>
+/*!
+ * \brief getA Compute the matrix A for the system x' = Ax + b
+ * \param t_qe The current generalized strains coordinates
+ * \tparam t_state_dimension The dimension of the state x
+ * \tparam t_number_of_chebyshev_nodes The number of Chebyshev nodes (which also account for the first one)
+ * \tparam t_na The number of allowed strain coordinates
+ * \tparam t_ne The number of modes per strain coordinate
+ * \return
+ */
+template<unsigned int t_state_dimension, unsigned int t_number_of_chebyshev_nodes, unsigned int t_na, unsigned int t_ne>
 Eigen::MatrixXd getA(Eigen::VectorXd &t_qe)
 {
     //  Define the Chebyshev points on the unit circle
-    const auto x = ComputeChebyshevPoints<t_N+1>();
+    const auto x = ComputeChebyshevPoints<t_number_of_chebyshev_nodes+1>();
 
 
 
     std::vector<Eigen::MatrixXd> A_stack;
 
-    for(unsigned int i=0; i<=t_N+1; i++){
+    for(unsigned int i=0; i<=t_number_of_chebyshev_nodes+1; i++){
         //  Extract the curvature from the strain
-        const Eigen::Vector3d K = Phi<na, ne>(x[i])*t_qe;
+        const Eigen::Vector3d K = Phi<t_na, t_ne>(x[i])*t_qe;
 
         //  Compute the A matrix of Q' = 1/2 A(K) Q
         Eigen::MatrixXd A_local(4,4);
@@ -40,32 +48,35 @@ Eigen::MatrixXd getA(Eigen::VectorXd &t_qe)
         A_stack.push_back(0.5*A_local);
     }
 
-    //  Declare the matrix for the system Ax = b
-    Eigen::MatrixXd A(t_ns, t_ns);
 
     //  Define a vector of index from 1 to t_ny
-    Eigen::VectorXi idxY(t_ny);
+    Eigen::VectorXi idxY(t_state_dimension);
     unsigned int i=0;
     for(auto& index : idxY)
         index = ++i;
 
     //  Now the index for the first element of each vector
     //  needs to skyp number of chebyshev points
-    Eigen::VectorXi idxX0 = idxY * t_N;
+    Eigen::VectorXi idxX0 = idxY * t_number_of_chebyshev_nodes;
 
-    Eigen::VectorXi idxYN = (idxY - Eigen::VectorXi::Ones(t_ny)) * t_N;
+    Eigen::VectorXi idxYN = (idxY - Eigen::VectorXi::Ones(t_state_dimension)) * t_number_of_chebyshev_nodes;
 
     //  Report to C++ indexing
-    idxY -= Eigen::VectorXi::Ones(t_ny);
-    idxX0 -= Eigen::VectorXi::Ones(t_ny);
-    idxYN -= Eigen::VectorXi::Ones(t_ny);
+    idxY -= Eigen::VectorXi::Ones(t_state_dimension);
+    idxX0 -= Eigen::VectorXi::Ones(t_state_dimension);
+    idxYN -= Eigen::VectorXi::Ones(t_state_dimension);
+
+    const unsigned int problem_dimension = t_state_dimension * t_number_of_chebyshev_nodes;
+
+    //  Declare the matrix for the system Ax = b
+    Eigen::MatrixXd A(problem_dimension, problem_dimension);
 
 
     //  Populate this matrix with all the elements in the right order
-    Eigen::VectorXi index(t_ny);
-    for(unsigned int in=0; in<t_N; in++){
-        Eigen::VectorXi tmp(t_ny);
-        tmp.setConstant(t_ny, 1, in+1);
+    Eigen::VectorXi index(t_state_dimension);
+    for(unsigned int in=0; in<t_number_of_chebyshev_nodes; in++){
+        Eigen::VectorXi tmp(t_state_dimension);
+        tmp.setConstant(t_state_dimension, 1, in+1);
         index = tmp + idxYN;
         A(index, index) = A_stack[in] ;
     }
@@ -100,9 +111,6 @@ int main()
     constexpr unsigned int prob_dimension = state_dimension * number_of_chebyshev_nodes;
     //  The subset of unknows in the problem
     constexpr unsigned int unknow_state_dimension = state_dimension * (number_of_chebyshev_nodes - 1);
-
-    //  Consider unit length rod
-    constexpr unsigned int L = 1;
 
     //  Number od admitted strain fields and number of mode per strain field
     constexpr unsigned int na = 3;
@@ -165,7 +173,7 @@ int main()
  *  The following is the translation into C++ of the equations presented in the PDF
  *
  */
-    const MatrixNpNp A = getA<state_dimension, number_of_chebyshev_nodes, prob_dimension, L, na, ne>(qe);
+    const MatrixNpNp A = getA<state_dimension, number_of_chebyshev_nodes, na, ne>(qe);
     const VectorNp b = Eigen::Matrix<double, prob_dimension, 1>::Zero();
 
 
