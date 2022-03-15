@@ -13,6 +13,8 @@
 #include "chebyshev_differentiation.h"
 #include "spectral_integration_utilities.h"
 
+#include "tictoc.h"
+
 
 
 /*!
@@ -84,14 +86,47 @@ Eigen::MatrixXd getA(Eigen::VectorXd &t_qe)
     return A;
 }
 
-void writeToFile(const std::string &t_name, const Eigen::MatrixXd t_matrix, const Eigen::IOFormat &t_format=Eigen::IOFormat())
+
+/*!
+ * \brief writeToFile writes a Eigen matrix into file
+ * \param t_name    name of the file
+ * \param t_matrix  the Eigen matrix to write into the file
+ * \param t_relative_path_from_build the relative path from the build folder to the file location. Default is none so the file is written in the build directory)
+ * \param t_format  the specification for writing. (Default in column major allignment, with comma column separator and 8 digits precision)
+ */
+void writeToFile(std::string t_name,
+                 const Eigen::MatrixXd &t_matrix,
+                 std::string t_relative_path_from_build="",
+                 const Eigen::IOFormat &t_format=Eigen::IOFormat(8, 0, ","))
 {
-    std::ofstream file(t_name.c_str());
+    if(not t_relative_path_from_build.empty()){
+        //  Ensure relative path ends with a backslash only if a path is given
+        if(not t_relative_path_from_build.ends_with('/'))
+            t_relative_path_from_build.append("/");
+    }
+
+
+    //  Ensure it ends with .csv
+    if(t_name.find(".csv") == std::string::npos)
+        t_name.append(".csv");
+
+    //  The file will be created in the location given by the realtive path and with the given name
+    const auto file_name_and_location = t_relative_path_from_build + t_name;
+
+    //  Create file in given location with given name
+    std::ofstream file(file_name_and_location.c_str());
+
+    //  Put matrix in this file
     file << t_matrix.format(t_format);
+
+    //  Close the file
+    file.close();
  }
 
 int main()
 {
+    tictoc tictoc;
+
     //  Define the initial state
     const Eigen::Vector4d Y0(1, 0, 0, 0);
 
@@ -178,10 +213,11 @@ int main()
 
 
     //  Apply transformation of initial condition onto ODE's matrices
+    tictoc.tic();
     const MatrixNpNp Ap = P.transpose() * A * P;
+    tictoc.toc("Time to compute P' A P : ");
     const MatrixNpNp Dp = P.transpose() * D * P;    //  Can be moved in setup
     const VectorNp bp   = P.transpose() * b;
-
 
 
 
