@@ -2,3 +2,7 @@
 build/
 
 CMakeLists.txt.user
+
+html/
+
+latex/
