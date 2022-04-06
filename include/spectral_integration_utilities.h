@@ -1,3 +1,9 @@
+/*! \file spectral_integration_utilities.h
+    \brief This file contains some functions needed in the numerical integration
+
+    In this file, we put functions needed to perform the numerical integration as the
+    permutation matrix and the Phi matrix.
+*/
 #ifndef SPECTRAL_INTEGRATION_UTILITIES_H
 #define SPECTRAL_INTEGRATION_UTILITIES_H
 

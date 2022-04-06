@@ -1,3 +1,9 @@
+/*! \file main.cpp
+    \brief The main file performing the spectral numerical integration.
+
+    In this file, we perform the computation from the PDF.
+*/
+
 #include <iostream>
 #include <vector>
 #include <algorithm>
@@ -38,6 +44,9 @@ Eigen::MatrixXd getA(Eigen::VectorXd &t_qe)
 
     for(unsigned int i=0; i<=t_number_of_chebyshev_nodes+1; i++){
         //  Extract the curvature from the strain
+        const auto base  = Phi<t_na, t_ne>(x[i]);
+
+
         const Eigen::Vector3d K = Phi<t_na, t_ne>(x[i])*t_qe;
 
         //  Compute the A matrix of Q' = 1/2 A(K) Q
@@ -123,6 +132,7 @@ void writeToFile(std::string t_name,
     file.close();
  }
 
+
 int main()
 {
     tictoc tictoc;
@@ -190,6 +200,7 @@ int main()
  */
 
     const MatrixNpNp  P = getP<state_dimension, number_of_chebyshev_nodes>();
+
     const MatrixNchebNcheb Dn = getDn<number_of_chebyshev_nodes>();
     const MatrixNpNp D = Eigen::KroneckerProduct(Eigen::MatrixXd::Identity(state_dimension, state_dimension), Dn);
 

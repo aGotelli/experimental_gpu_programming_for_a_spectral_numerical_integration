@@ -1,8 +1,14 @@
+/*! \file chebyshev_differentiation.h
+    \brief This file contains the functions related to Chebyshev.
+
+    In this file, we have all the functions needed to compute the vector of
+    Chebyshev points and the differentiation matrix Dn.
+*/
 #ifndef CHEBYSHEV_DIFFERENTIATION_H
 #define CHEBYSHEV_DIFFERENTIATION_H
 
 #include <Eigen/Dense>
-
+#include <iostream>
 
 /*!
  * \brief ComputeChebyshevPoints Computes the Chebyshev points in the given interval
@@ -80,7 +86,7 @@ static Eigen::MatrixXd getDn()
     }
 
     //  Definition of the temporary matrix Y
-    const MatrixNN Y = X - X.transpose() + MatrixNN::Identity();
+    const MatrixNN dX = X - X.transpose() + MatrixNN::Identity();
 
     //  Declare the differentiation matrix
     Eigen::MatrixXd  Dn(t_number_of_chebyshev_nodes, t_number_of_chebyshev_nodes);
@@ -89,7 +95,7 @@ static Eigen::MatrixXd getDn()
     //  Obtain off diagonal element for the differentiation matrix
     for(unsigned int i=0; i<t_number_of_chebyshev_nodes;i++) {
         for(unsigned int j=0; j<t_number_of_chebyshev_nodes;j++) {
-            Dn(i,j) = C(i, j) / Y(i, j);
+            Dn(i,j) = C(i, j) / dX(i, j);
         }
     }
 

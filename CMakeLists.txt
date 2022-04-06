@@ -17,4 +17,3 @@ add_executable(spectral_integration main.cpp
                                     include/chebyshev_differentiation.h
                                     include/spectral_integration_utilities.h)
 target_link_libraries(spectral_integration Eigen3::Eigen)
-
