@@ -44,9 +44,6 @@ Eigen::MatrixXd getA(Eigen::VectorXd &t_qe)
 
     for(unsigned int i=0; i<=t_number_of_chebyshev_nodes+1; i++){
         //  Extract the curvature from the strain
-        const auto base  = Phi<t_na, t_ne>(x[i]);
-
-
         const Eigen::Vector3d K = Phi<t_na, t_ne>(x[i])*t_qe;
 
         //  Compute the A matrix of Q' = 1/2 A(K) Q
