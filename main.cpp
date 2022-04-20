@@ -35,58 +35,45 @@
 template<unsigned int t_state_dimension, unsigned int t_number_of_chebyshev_nodes, unsigned int t_na, unsigned int t_ne>
 Eigen::MatrixXd getA(Eigen::VectorXd &t_qe)
 {
+
     //  Define the Chebyshev points on the unit circle
     const auto x = ComputeChebyshevPoints<t_number_of_chebyshev_nodes+1>();
 
+    //  Definition of the problem dymension
+    static constexpr unsigned int problem_dimension = t_state_dimension * t_number_of_chebyshev_nodes;
 
+    std::array<Eigen::Matrix<double, t_state_dimension, t_state_dimension>, t_number_of_chebyshev_nodes+1> A_stack;
 
-    std::vector<Eigen::MatrixXd> A_stack;
+    Eigen::Vector3d K;
+    Eigen::Matrix<double, t_state_dimension, t_state_dimension> A_at_chebyshev_point;
+    for(unsigned int i=0; i<x.size(); i++){
 
-    for(unsigned int i=0; i<=t_number_of_chebyshev_nodes+1; i++){
         //  Extract the curvature from the strain
-        const Eigen::Vector3d K = Phi<t_na, t_ne>(x[i])*t_qe;
+        K = Phi<t_na, t_ne>(x[i])*t_qe;
 
         //  Compute the A matrix of Q' = 1/2 A(K) Q
-        Eigen::MatrixXd A_local(4,4);
-        A_local <<   0, -K(0),  -K(1),  -K(2),
-                  K(0),     0,   K(2),  -K(1),
-                  K(1), -K(2),      0,   K(0),
-                  K(2),  K(1),  -K(0),      0;
+        A_at_chebyshev_point <<      0, -K(0),  -K(1),  -K(2),
+                                  K(0),     0,   K(2),  -K(1),
+                                  K(1), -K(2),      0,   K(0),
+                                  K(2),  K(1),  -K(0),      0;
 
-        A_stack.push_back(0.5*A_local);
+        A_stack[i] = 0.5*A_at_chebyshev_point;
     }
 
-
-    //  Define a vector of index from 1 to t_ny
-    Eigen::VectorXi idxY(t_state_dimension);
-    unsigned int i=0;
-    for(auto& index : idxY)
-        index = ++i;
-
-    //  Now the index for the first element of each vector
-    //  needs to skyp number of chebyshev points
-    Eigen::VectorXi idxX0 = idxY * t_number_of_chebyshev_nodes;
-
-    Eigen::VectorXi idxYN = (idxY - Eigen::VectorXi::Ones(t_state_dimension)) * t_number_of_chebyshev_nodes;
-
-    //  Report to C++ indexing
-    idxY -= Eigen::VectorXi::Ones(t_state_dimension);
-    idxX0 -= Eigen::VectorXi::Ones(t_state_dimension);
-    idxYN -= Eigen::VectorXi::Ones(t_state_dimension);
-
-    const unsigned int problem_dimension = t_state_dimension * t_number_of_chebyshev_nodes;
-
     //  Declare the matrix for the system Ax = b
-    Eigen::MatrixXd A(problem_dimension, problem_dimension);
+    Eigen::Matrix<double, problem_dimension, problem_dimension> A = Eigen::Matrix<double, problem_dimension, problem_dimension>::Zero();
 
+    //  Define a vector containing the indexes of the top left corners of the blocks composing the matrix A
+    const Eigen::VectorXi block_indexes = Eigen::VectorXi::LinSpaced(t_state_dimension, 0, t_number_of_chebyshev_nodes*(t_state_dimension-1));
 
     //  Populate this matrix with all the elements in the right order
-    Eigen::VectorXi index(t_state_dimension);
-    for(unsigned int in=0; in<t_number_of_chebyshev_nodes; in++){
-        Eigen::VectorXi tmp(t_state_dimension);
-        tmp.setConstant(t_state_dimension, 1, in+1);
-        index = tmp + idxYN;
-        A(index, index) = A_stack[in] ;
+    Eigen::VectorXi point_indexes = block_indexes - Eigen::VectorXi::Constant(t_state_dimension, 1, 1);
+    for(unsigned int chebyshev_point=0; chebyshev_point<t_number_of_chebyshev_nodes; chebyshev_point++){
+
+        //  Get the current set of indexes for the coefficients of the matrix A at the current chebyshev point
+        point_indexes += Eigen::VectorXi::Constant(t_state_dimension, 1, 1);
+        A(point_indexes, point_indexes) = A_stack[chebyshev_point] ;
+
     }
 
     return A;
@@ -103,7 +90,7 @@ Eigen::MatrixXd getA(Eigen::VectorXd &t_qe)
 void writeToFile(std::string t_name,
                  const Eigen::MatrixXd &t_matrix,
                  std::string t_relative_path_from_build="",
-                 const Eigen::IOFormat &t_format=Eigen::IOFormat(8, 0, ","))
+                 const Eigen::IOFormat &t_format=Eigen::IOFormat(16, 0, ","))
 {
     if(not t_relative_path_from_build.empty()){
         //  Ensure relative path ends with a backslash only if a path is given
@@ -135,7 +122,7 @@ int main()
     tictoc tictoc;
 
     //  Define the initial state
-    const Eigen::Vector4d Y0(1, 0, 0, 0);
+    const Eigen::Vector4d initial_state(1, 0, 0, 0); // Quaternion case
 
 /*  The state dimension and the number of nodes are known. The state dimension will not change
  *  (a quaternion will remain a quaternion, a twist will remain a twist ecc..) and the number of
@@ -146,7 +133,7 @@ int main()
  *  compile time and we can use templated function for our matrices and vector, which are a bit faster.
  */
     //  Dimension of the state
-    constexpr unsigned int state_dimension = Y0.rows();
+    constexpr unsigned int state_dimension = initial_state.rows();
     //  Number of Chebyshev nodes
     constexpr unsigned int number_of_chebyshev_nodes = 29;
     //  Problem size is the total number of elements
@@ -216,14 +203,17 @@ int main()
  *  The following is the translation into C++ of the equations presented in the PDF
  *
  */
+    tictoc.tic();
     const MatrixNpNp A = getA<state_dimension, number_of_chebyshev_nodes, na, ne>(qe);
+    tictoc.toc("Time to compute A : ");
+
+
     const VectorNp b = Eigen::Matrix<double, prob_dimension, 1>::Zero();
 
 
     //  Apply transformation of initial condition onto ODE's matrices
-    tictoc.tic();
+
     const MatrixNpNp Ap = P.transpose() * A * P;
-    tictoc.toc("Time to compute P' A P : ");
     const MatrixNpNp Dp = P.transpose() * D * P;    //  Can be moved in setup
     const VectorNp bp   = P.transpose() * b;
 
@@ -232,7 +222,7 @@ int main()
     //  Compute the ivp
     const MatrixNpNs D_IT = Dp.block<prob_dimension, state_dimension>(0, 0);    //  Can be moved in setup
     const MatrixNpNs A_IT = Ap.block<prob_dimension, state_dimension>(0, 0);
-    const VectorNp ivp = ( D_IT - A_IT ) * Y0;
+    const VectorNp ivp = ( D_IT - A_IT ) * initial_state;
 
 
     //  Obtain the section related to the unknows of the problem
@@ -246,13 +236,13 @@ int main()
 
     //  We now stack together the initial state on top of the other we just compute
     //  Then we need to map back to a more readable stack of states
-    const VectorNp Y = P * (VectorNp() << Y0, Yn).finished();
+    const VectorNp Y = P * (VectorNp() << initial_state, Yn).finished();
 
     //  Then we write the element row-wise
     const MatrixNchebNs Y_stack = Eigen::Map<const MatrixNchebNs>(Y.data());
     std::cout<< "Y_stack = " << std::endl << Y_stack <<std::endl << std::endl;
 
-
+    writeToFile("Q_stack", Y_stack);
 
 
 
