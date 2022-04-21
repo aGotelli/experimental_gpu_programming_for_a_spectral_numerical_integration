@@ -74,6 +74,7 @@ Eigen::MatrixXd getA(Eigen::VectorXd &t_qe)
         point_indexes += Eigen::VectorXi::Constant(t_state_dimension, 1, 1);
         A(point_indexes, point_indexes) = A_stack[chebyshev_point] ;
 
+        std::cout << "A \n" << A << std::endl;
     }
 
     return A;
@@ -90,31 +91,7 @@ Eigen::MatrixXd getA(Eigen::VectorXd &t_qe)
 void writeToFile(std::string t_name,
                  const Eigen::MatrixXd &t_matrix,
                  std::string t_relative_path_from_build="",
-                 const Eigen::IOFormat &t_format=Eigen::IOFormat(16, 0, ","))
-{
-    if(not t_relative_path_from_build.empty()){
-        //  Ensure relative path ends with a backslash only if a path is given
-        if(not t_relative_path_from_build.ends_with('/'))
-            t_relative_path_from_build.append("/");
-    }
-
-
-    //  Ensure it ends with .csv
-    if(t_name.find(".csv") == std::string::npos)
-        t_name.append(".csv");
-
-    //  The file will be created in the location given by the realtive path and with the given name
-    const auto file_name_and_location = t_relative_path_from_build + t_name;
-
-    //  Create file in given location with given name
-    std::ofstream file(file_name_and_location.c_str());
-
-    //  Put matrix in this file
-    file << t_matrix.format(t_format);
-
-    //  Close the file
-    file.close();
- }
+                 const Eigen::IOFormat &t_format=Eigen::IOFormat(16, 0, ","));
 
 
 int main()
@@ -123,6 +100,11 @@ int main()
 
     //  Define the initial state
     const Eigen::Vector4d initial_state(1, 0, 0, 0); // Quaternion case
+
+
+    Eigen::Quaterniond q;
+
+    Eigen::Matrix3d R = q.toRotationMatrix();
 
 /*  The state dimension and the number of nodes are known. The state dimension will not change
  *  (a quaternion will remain a quaternion, a twist will remain a twist ecc..) and the number of
@@ -135,15 +117,16 @@ int main()
     //  Dimension of the state
     constexpr unsigned int state_dimension = initial_state.rows();
     //  Number of Chebyshev nodes
-    constexpr unsigned int number_of_chebyshev_nodes = 29;
+    constexpr unsigned int number_of_chebyshev_nodes = 5;
     //  Problem size is the total number of elements
     constexpr unsigned int prob_dimension = state_dimension * number_of_chebyshev_nodes;
     //  The subset of unknows in the problem
     constexpr unsigned int unknow_state_dimension = state_dimension * (number_of_chebyshev_nodes - 1);
 
     //  Number od admitted strain fields and number of mode per strain field
-    constexpr unsigned int na = 3;
-    constexpr unsigned int ne = 3;
+    constexpr unsigned int na = 3;  //  Kirkhoff rod
+    constexpr unsigned int ne = 3;  // dimesion of qe
+
 
 
     //  Const curvature strain field
@@ -163,7 +146,7 @@ int main()
  *  terms of matrix and vector dymensions
  */
     typedef Eigen::Matrix<double, prob_dimension, prob_dimension> MatrixNpNp;
-    typedef Eigen::Matrix<double, prob_dimension, 1> VectorNp;
+    typedef Eigen::Matrix<double, prob_dimension, 1> VectorNp;    
 
     typedef Eigen::Matrix<double, prob_dimension, state_dimension> MatrixNpNs;
 
@@ -203,9 +186,9 @@ int main()
  *  The following is the translation into C++ of the equations presented in the PDF
  *
  */
-    tictoc.tic();
+    //tictoc.tic();
     const MatrixNpNp A = getA<state_dimension, number_of_chebyshev_nodes, na, ne>(qe);
-    tictoc.toc("Time to compute A : ");
+    //tictoc.toc("Time to compute A : ");
 
 
     const VectorNp b = Eigen::Matrix<double, prob_dimension, 1>::Zero();
@@ -215,36 +198,90 @@ int main()
 
     const MatrixNpNp Ap = P.transpose() * A * P;
     const MatrixNpNp Dp = P.transpose() * D * P;    //  Can be moved in setup
-    const VectorNp bp   = P.transpose() * b;
+    const VectorNp bp   = P * b;
 
 
 
     //  Compute the ivp
     const MatrixNpNs D_IT = Dp.block<prob_dimension, state_dimension>(0, 0);    //  Can be moved in setup
     const MatrixNpNs A_IT = Ap.block<prob_dimension, state_dimension>(0, 0);
-    const VectorNp ivp = ( D_IT - A_IT ) * initial_state;
+    const VectorNp b_IT = ( D_IT - A_IT ) * initial_state;
 
 
     //  Obtain the section related to the unknows of the problem
     const MatrixNuNu D_NN = Dp.block<unknow_state_dimension, unknow_state_dimension>(state_dimension, state_dimension);
     const MatrixNuNu A_NN = Ap.block<unknow_state_dimension, unknow_state_dimension>(state_dimension, state_dimension);
-    const VectorNu ivp_NN = ivp.block<unknow_state_dimension, 1>(state_dimension, 0);
+    const VectorNu ivp = b_IT.block<unknow_state_dimension, 1>(state_dimension, 0);
     const VectorNu b_NN   = bp.block<unknow_state_dimension, 1>(state_dimension, 0);
 
     //  Finally compute the states at the unknows Chebyshev points
-    const VectorNu Yn = (D_NN - A_NN).inverse() * (b_NN - ivp_NN);
+    const VectorNu X_NN = (D_NN - A_NN).inverse() * (b_NN - ivp);
 
     //  We now stack together the initial state on top of the other we just compute
     //  Then we need to map back to a more readable stack of states
-    const VectorNp Y = P * (VectorNp() << initial_state, Yn).finished();
+    const VectorNp X_tilde = P * (VectorNp() << initial_state, X_NN).finished();
 
     //  Then we write the element row-wise
-    const MatrixNchebNs Y_stack = Eigen::Map<const MatrixNchebNs>(Y.data());
-    std::cout<< "Y_stack = " << std::endl << Y_stack <<std::endl << std::endl;
+    const MatrixNchebNs X_stack = Eigen::Map<const MatrixNchebNs>(X_tilde.data());
+    std::cout<< "X_stack = " << std::endl << X_stack <<std::endl << std::endl;
 
-    writeToFile("Q_stack", Y_stack);
+    writeToFile("Q_stack", X_stack);
 
 
 
     return 0;
+
+
+    /*
+     * Workflow
+     *
+     * 1) Read through, test some values qe Cheb points
+     *
+     * 2) Move the computations in main into a function IntegrateQuaternion (it returns quaternion stack)
+     *
+     * 3) Extend to positions (stack of r)
+     *
+     */
+
+
 }
+
+
+
+
+
+
+
+
+
+
+
+
+void writeToFile(std::string t_name,
+                 const Eigen::MatrixXd &t_matrix,
+                 std::string t_relative_path_from_build,
+                 const Eigen::IOFormat &t_format)
+{
+    if(not t_relative_path_from_build.empty()){
+        //  Ensure relative path ends with a backslash only if a path is given
+        if(not t_relative_path_from_build.ends_with('/'))
+            t_relative_path_from_build.append("/");
+    }
+
+
+    //  Ensure it ends with .csv
+    if(t_name.find(".csv") == std::string::npos)
+        t_name.append(".csv");
+
+    //  The file will be created in the location given by the realtive path and with the given name
+    const auto file_name_and_location = t_relative_path_from_build + t_name;
+
+    //  Create file in given location with given name
+    std::ofstream file(file_name_and_location.c_str());
+
+    //  Put matrix in this file
+    file << t_matrix.format(t_format);
+
+    //  Close the file
+    file.close();
+ }
