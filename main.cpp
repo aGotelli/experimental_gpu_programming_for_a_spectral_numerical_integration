@@ -22,6 +22,13 @@
 #include "tictoc.h"
 
 
+//  Number od admitted strain fields and number of mode per strain field
+static constexpr unsigned int na = 3;  //  Kirkhoff rod
+static constexpr unsigned int ne = 3;  // dimesion of qe
+
+//  Number of Chebyshev nodes
+static constexpr unsigned int number_of_chebyshev_nodes = 5;
+
 
 /*!
  * \brief getA Compute the matrix A for the system x' = Ax + b
@@ -33,7 +40,7 @@
  * \return
  */
 template<unsigned int t_state_dimension, unsigned int t_number_of_chebyshev_nodes, unsigned int t_na, unsigned int t_ne>
-Eigen::MatrixXd getA(Eigen::VectorXd &t_qe)
+Eigen::MatrixXd getA(const Eigen::Matrix<double, ne*ne, 1> &t_qe)
 {
 
     //  Define the Chebyshev points on the unit circle
@@ -73,8 +80,6 @@ Eigen::MatrixXd getA(Eigen::VectorXd &t_qe)
         //  Get the current set of indexes for the coefficients of the matrix A at the current chebyshev point
         point_indexes += Eigen::VectorXi::Constant(t_state_dimension, 1, 1);
         A(point_indexes, point_indexes) = A_stack[chebyshev_point] ;
-
-        std::cout << "A \n" << A << std::endl;
     }
 
     return A;
@@ -94,43 +99,163 @@ void writeToFile(std::string t_name,
                  const Eigen::IOFormat &t_format=Eigen::IOFormat(16, 0, ","));
 
 
+
+Eigen::MatrixXd GetQuaternions(const Eigen::Vector4d &t_initial_state, const Eigen::Matrix<double, ne*ne, 1> &t_qe)
+{
+    /*  The state dimension and the number of nodes are known. The state dimension will not change
+     *  (a quaternion will remain a quaternion, a twist will remain a twist ecc..) and the number of
+     *  nodes are not changed at runtime and neither between runs. Typically, once a satisfactory number
+     *  of nodes has been found, it is kept for the whole lifetime of the project.
+     *
+     *  Thus, we can enforce this concept with constexpr classifier so that the values are known at
+     *  compile time and we can use templated function for our matrices and vector, which are a bit faster.
+     */
+        //  Dimension of the state
+        constexpr unsigned int state_dimension = 4;
+
+        //  Problem size is the total number of elements
+        constexpr unsigned int prob_dimension = state_dimension * number_of_chebyshev_nodes;
+        //  The subset of unknows in the problem
+        constexpr unsigned int unknow_state_dimension = state_dimension * (number_of_chebyshev_nodes - 1);
+
+
+    /*  These are a set of type definition in order to have a more neat algorithm in
+     *  terms of matrix and vector dymensions
+     */
+        typedef Eigen::Matrix<double, prob_dimension, prob_dimension> MatrixNpNp;
+        typedef Eigen::Matrix<double, prob_dimension, 1> VectorNp;
+
+        typedef Eigen::Matrix<double, prob_dimension, state_dimension> MatrixNpNs;
+
+        typedef Eigen::Matrix<double, unknow_state_dimension, unknow_state_dimension> MatrixNuNu;
+        typedef Eigen::Matrix<double, unknow_state_dimension, 1> VectorNu;
+
+        typedef Eigen::Matrix<double, number_of_chebyshev_nodes, number_of_chebyshev_nodes> MatrixNchebNcheb;
+
+        typedef Eigen::Matrix<double, number_of_chebyshev_nodes, state_dimension, Eigen::ColMajor> MatrixNchebNs;
+
+    /*  In this first part, we precompute the matrices P and Dn. In fact, once we know the state dimension and the
+     *  number of nodes, these matrices are constant and thus me can compute them beforehand
+     *
+     *  P.S. As we know the number of nodes, the matrix Phi can be computed at every chebyshev point to be stacked
+     *  into a vector. As a result, instead of computing the matrices, we directly access their value in the vector position.
+     *  This can actually be something more than 200 times faster.
+     *
+     */
+
+        const MatrixNpNp  P = getP<state_dimension, number_of_chebyshev_nodes>();
+
+        const MatrixNchebNcheb Dn = getDn<number_of_chebyshev_nodes>();
+        const MatrixNpNp D = Eigen::KroneckerProduct(Eigen::MatrixXd::Identity(state_dimension, state_dimension), Dn);
+
+    /*  In this part we compute the matrix A and the vector b.
+     *  In this case, the elements of the matrix A depends on the strain. As we change the strains during
+     *  simulation, we have to compute the components of A at runtime.
+     *
+     *  Similarly, the vector b contains the values not related to the derivating variable, but that depends on other parameters.
+     *  For example when computing r' = R(Q)*Γ it does not depend on r but only on Q and Γ.
+     *
+     *  We can interpret everything before this point as the setup and everything after as the actual run-time operations.
+     *
+     *  In the following there are some matrices and operation that could be moved in the setup. However I choose to left them
+     *  there for clarity, but feel free to move where you thing it's better.
+     *
+     *  The following is the translation into C++ of the equations presented in the PDF
+     *
+     */
+        //tictoc.tic();
+        const MatrixNpNp A = getA<state_dimension, number_of_chebyshev_nodes, na, ne>(t_qe);
+        //tictoc.toc("Time to compute A : ");
+
+
+        const VectorNp b = Eigen::Matrix<double, prob_dimension, 1>::Zero();
+
+
+        //  Apply transformation of initial condition onto ODE's matrices
+
+        const MatrixNpNp Ap = P.transpose() * A * P;
+        const MatrixNpNp Dp = P.transpose() * D * P;    //  Can be moved in setup
+        const VectorNp bp   = P * b;
+
+
+
+        //  Compute the ivp
+        const MatrixNpNs D_IT = Dp.block<prob_dimension, state_dimension>(0, 0);    //  Can be moved in setup
+        const MatrixNpNs A_IT = Ap.block<prob_dimension, state_dimension>(0, 0);
+        const VectorNp b_IT = ( D_IT - A_IT ) * t_initial_state;
+
+
+        //  Obtain the section related to the unknows of the problem
+        const MatrixNuNu D_NN = Dp.block<unknow_state_dimension, unknow_state_dimension>(state_dimension, state_dimension);
+        const MatrixNuNu A_NN = Ap.block<unknow_state_dimension, unknow_state_dimension>(state_dimension, state_dimension);
+        const VectorNu ivp = b_IT.block<unknow_state_dimension, 1>(state_dimension, 0);
+        const VectorNu b_NN   = bp.block<unknow_state_dimension, 1>(state_dimension, 0);
+
+        //  Finally compute the states at the unknows Chebyshev points
+        const VectorNu X_NN = (D_NN - A_NN).inverse() * (b_NN - ivp);
+
+        //  We now stack together the initial state on top of the other we just compute
+        //  Then we need to map back to a more readable stack of states
+        const VectorNp X_tilde = P * (VectorNp() << t_initial_state, X_NN).finished();
+
+        //  Then we write the element row-wise
+        const MatrixNchebNs X_stack = Eigen::Map<const MatrixNchebNs>(X_tilde.data());
+
+        return X_stack;
+
+}
+
+
+
+
+Eigen::MatrixXd IntegratePositions(const Eigen::Vector3d &t_initial_state,
+                                   const Eigen::Matrix<double, ne*ne, 1> &t_qe,
+                                   const Eigen::MatrixXd &t_quaternions_stack)
+{
+    /*  The state dimension and the number of nodes are known. The state dimension will not change
+     *  (a quaternion will remain a quaternion, a twist will remain a twist ecc..) and the number of
+     *  nodes are not changed at runtime and neither between runs. Typically, once a satisfactory number
+     *  of nodes has been found, it is kept for the whole lifetime of the project.
+     *
+     *  Thus, we can enforce this concept with constexpr classifier so that the values are known at
+     *  compile time and we can use templated function for our matrices and vector, which are a bit faster.
+     */
+        //  Dimension of the state
+        constexpr unsigned int state_dimension = 3;
+
+        //  Problem size is the total number of elements
+        constexpr unsigned int prob_dimension = state_dimension * number_of_chebyshev_nodes;
+        //  The subset of unknows in the problem
+        constexpr unsigned int unknow_state_dimension = state_dimension * (number_of_chebyshev_nodes - 1);
+
+
+    /*  These are a set of type definition in order to have a more neat algorithm in
+     *  terms of matrix and vector dymensions
+     */
+        typedef Eigen::Matrix<double, prob_dimension, prob_dimension> MatrixNpNp;
+        typedef Eigen::Matrix<double, prob_dimension, 1> VectorNp;
+
+        typedef Eigen::Matrix<double, prob_dimension, state_dimension> MatrixNpNs;
+
+        typedef Eigen::Matrix<double, unknow_state_dimension, unknow_state_dimension> MatrixNuNu;
+        typedef Eigen::Matrix<double, unknow_state_dimension, 1> VectorNu;
+
+        typedef Eigen::Matrix<double, number_of_chebyshev_nodes, number_of_chebyshev_nodes> MatrixNchebNcheb;
+
+        typedef Eigen::Matrix<double, number_of_chebyshev_nodes, state_dimension, Eigen::ColMajor> MatrixNchebNs;
+
+    MatrixNchebNs positions_stack;
+
+    return positions_stack;
+}
+
+
 int main()
 {
     tictoc tictoc;
 
-    //  Define the initial state
-    const Eigen::Vector4d initial_state(1, 0, 0, 0); // Quaternion case
-
-
-    Eigen::Quaterniond q;
-
-    Eigen::Matrix3d R = q.toRotationMatrix();
-
-/*  The state dimension and the number of nodes are known. The state dimension will not change
- *  (a quaternion will remain a quaternion, a twist will remain a twist ecc..) and the number of
- *  nodes are not changed at runtime and neither between runs. Typically, once a satisfactory number
- *  of nodes has been found, it is kept for the whole lifetime of the project.
- *
- *  Thus, we can enforce this concept with constexpr classifier so that the values are known at
- *  compile time and we can use templated function for our matrices and vector, which are a bit faster.
- */
-    //  Dimension of the state
-    constexpr unsigned int state_dimension = initial_state.rows();
-    //  Number of Chebyshev nodes
-    constexpr unsigned int number_of_chebyshev_nodes = 5;
-    //  Problem size is the total number of elements
-    constexpr unsigned int prob_dimension = state_dimension * number_of_chebyshev_nodes;
-    //  The subset of unknows in the problem
-    constexpr unsigned int unknow_state_dimension = state_dimension * (number_of_chebyshev_nodes - 1);
-
-    //  Number od admitted strain fields and number of mode per strain field
-    constexpr unsigned int na = 3;  //  Kirkhoff rod
-    constexpr unsigned int ne = 3;  // dimesion of qe
-
-
-
     //  Const curvature strain field
-    Eigen::VectorXd qe(ne*na);
+    Eigen::Matrix<double, ne*na, 1> qe;
     //  Here we give some value for the strain
     qe <<   0,
             0,
@@ -142,91 +267,24 @@ int main()
           0.0000,
           0.0000;
 
-/*  These are a set of type definition in order to have a more neat algorithm in
- *  terms of matrix and vector dymensions
- */
-    typedef Eigen::Matrix<double, prob_dimension, prob_dimension> MatrixNpNp;
-    typedef Eigen::Matrix<double, prob_dimension, 1> VectorNp;    
+//  Let's deal with quaternion
 
-    typedef Eigen::Matrix<double, prob_dimension, state_dimension> MatrixNpNs;
-
-    typedef Eigen::Matrix<double, unknow_state_dimension, unknow_state_dimension> MatrixNuNu;
-    typedef Eigen::Matrix<double, unknow_state_dimension, 1> VectorNu;
-
-    typedef Eigen::Matrix<double, number_of_chebyshev_nodes, number_of_chebyshev_nodes> MatrixNchebNcheb;
-
-    typedef Eigen::Matrix<double, number_of_chebyshev_nodes, state_dimension, Eigen::ColMajor> MatrixNchebNs;
-
-/*  In this first part, we precompute the matrices P and Dn. In fact, once we know the state dimension and the
- *  number of nodes, these matrices are constant and thus me can compute them beforehand
- *
- *  P.S. As we know the number of nodes, the matrix Phi can be computed at every chebyshev point to be stacked
- *  into a vector. As a result, instead of computing the matrices, we directly access their value in the vector position.
- *  This can actually be something more than 200 times faster.
- *
- */
-
-    const MatrixNpNp  P = getP<state_dimension, number_of_chebyshev_nodes>();
-
-    const MatrixNchebNcheb Dn = getDn<number_of_chebyshev_nodes>();
-    const MatrixNpNp D = Eigen::KroneckerProduct(Eigen::MatrixXd::Identity(state_dimension, state_dimension), Dn);
-
-/*  In this part we compute the matrix A and the vector b.
- *  In this case, the elements of the matrix A depends on the strain. As we change the strains during
- *  simulation, we have to compute the components of A at runtime.
- *
- *  Similarly, the vector b contains the values not related to the derivating variable, but that depends on other parameters.
- *  For example when computing r' = R(Q)*Γ it does not depend on r but only on Q and Γ.
- *
- *  We can interpret everything before this point as the setup and everything after as the actual run-time operations.
- *
- *  In the following there are some matrices and operation that could be moved in the setup. However I choose to left them
- *  there for clarity, but feel free to move where you thing it's better.
- *
- *  The following is the translation into C++ of the equations presented in the PDF
- *
- */
-    //tictoc.tic();
-    const MatrixNpNp A = getA<state_dimension, number_of_chebyshev_nodes, na, ne>(qe);
-    //tictoc.toc("Time to compute A : ");
+    //  Define the initial state
+    const Eigen::Vector4d initial_state(1, 0, 0, 0); // Quaternion case
+    const auto ruaternions_stack = GetQuaternions(initial_state, qe);
 
 
-    const VectorNp b = Eigen::Matrix<double, prob_dimension, 1>::Zero();
+//  Let's deal with positions
+     const Eigen::Vector3d initial_position(0, 0, 0);
+     const auto positions_stack = IntegratePositions(initial_position, qe, ruaternions_stack);
+
+    Eigen::Quaterniond q;
+    Eigen::Matrix3d R = q.toRotationMatrix();
 
 
-    //  Apply transformation of initial condition onto ODE's matrices
+    std::cout<< "X_stack = " << std::endl << ruaternions_stack <<std::endl << std::endl;
 
-    const MatrixNpNp Ap = P.transpose() * A * P;
-    const MatrixNpNp Dp = P.transpose() * D * P;    //  Can be moved in setup
-    const VectorNp bp   = P * b;
-
-
-
-    //  Compute the ivp
-    const MatrixNpNs D_IT = Dp.block<prob_dimension, state_dimension>(0, 0);    //  Can be moved in setup
-    const MatrixNpNs A_IT = Ap.block<prob_dimension, state_dimension>(0, 0);
-    const VectorNp b_IT = ( D_IT - A_IT ) * initial_state;
-
-
-    //  Obtain the section related to the unknows of the problem
-    const MatrixNuNu D_NN = Dp.block<unknow_state_dimension, unknow_state_dimension>(state_dimension, state_dimension);
-    const MatrixNuNu A_NN = Ap.block<unknow_state_dimension, unknow_state_dimension>(state_dimension, state_dimension);
-    const VectorNu ivp = b_IT.block<unknow_state_dimension, 1>(state_dimension, 0);
-    const VectorNu b_NN   = bp.block<unknow_state_dimension, 1>(state_dimension, 0);
-
-    //  Finally compute the states at the unknows Chebyshev points
-    const VectorNu X_NN = (D_NN - A_NN).inverse() * (b_NN - ivp);
-
-    //  We now stack together the initial state on top of the other we just compute
-    //  Then we need to map back to a more readable stack of states
-    const VectorNp X_tilde = P * (VectorNp() << initial_state, X_NN).finished();
-
-    //  Then we write the element row-wise
-    const MatrixNchebNs X_stack = Eigen::Map<const MatrixNchebNs>(X_tilde.data());
-    std::cout<< "X_stack = " << std::endl << X_stack <<std::endl << std::endl;
-
-    writeToFile("Q_stack", X_stack);
-
+    writeToFile("Q_stack", ruaternions_stack);
 
 
     return 0;
