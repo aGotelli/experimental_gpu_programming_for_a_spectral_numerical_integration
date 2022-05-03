@@ -10,7 +10,7 @@
 #include <Eigen/Dense>
 #include <unsupported/Eigen/KroneckerProduct>
 
-#include <boost/math/special_functions/chebyshev.hpp>
+#include <boost/math/special_functions/legendre.hpp>
 
 /*!
  * \brief Phi Compute the basis matrix Phi for a given X
@@ -29,7 +29,7 @@ static const Eigen::MatrixXd Phi(const double t_X, const double &t_begin=0, cons
     //  Compute the values of the polynomial for every element of the strain field
     Eigen::Matrix<double, t_ne, 1> Phi_i;
     for(unsigned int i=0; i<t_ne; i++)
-        Phi_i[i] = boost::math::chebyshev_t(i, x);
+        Phi_i[i] = boost::math::legendre_p(i, x);
 
 
     //  Define the matrix of bases
