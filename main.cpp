@@ -27,7 +27,7 @@ static constexpr unsigned int na = 3;  //  Kirkhoff rod
 static constexpr unsigned int ne = 3;  // dimesion of qe
 
 //  Number of Chebyshev nodes
-static constexpr unsigned int number_of_chebyshev_nodes = 6;
+static constexpr unsigned int number_of_chebyshev_nodes = 11;
 
 
 /*!
@@ -44,12 +44,12 @@ Eigen::MatrixXd getA(const Eigen::Matrix<double, ne*ne, 1> &t_qe)
 {
 
     //  Define the Chebyshev points on the unit circle
-    const auto x = ComputeChebyshevPoints<t_number_of_chebyshev_nodes+1>();
+    const auto x = ComputeChebyshevPoints<t_number_of_chebyshev_nodes>();
 
     //  Definition of the problem dymension
     static constexpr unsigned int problem_dimension = t_state_dimension * t_number_of_chebyshev_nodes;
 
-    std::array<Eigen::Matrix<double, t_state_dimension, t_state_dimension>, t_number_of_chebyshev_nodes+1> A_stack;
+    std::array<Eigen::Matrix<double, t_state_dimension, t_state_dimension>, t_number_of_chebyshev_nodes> A_stack;
 
     Eigen::Vector3d K;
     Eigen::Matrix<double, t_state_dimension, t_state_dimension> A_at_chebyshev_point;
@@ -262,12 +262,12 @@ int main()
     qe <<   0,
             0,
             0,
+            1.2877691307032,
+           -1.63807499160786,
+            0.437406679142598,
             0,
             0,
-            0,
-         -1.5,
-          0.0000,
-          0.0000;
+            0;
 
 //  Let's deal with quaternion
 
