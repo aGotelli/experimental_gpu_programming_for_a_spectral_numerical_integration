@@ -62,7 +62,7 @@ Eigen::Matrix<double, 3, 3> getHat(const Eigen::Vector3d t_v) {
  * \return
  */
 template<unsigned int t_state_dimension>
-Eigen::MatrixXd getA(const std::array<Eigen::Matrix<double, t_state_dimension, t_state_dimension>, number_of_chebyshev_nodes+1> t_A_stack)
+Eigen::MatrixXd getA(const std::array<Eigen::Matrix<double, t_state_dimension, t_state_dimension>, number_of_chebyshev_nodes> t_A_stack)
 {
     //  Definition of the problem dymension
     static constexpr unsigned int problem_dimension = t_state_dimension * number_of_chebyshev_nodes;
@@ -149,9 +149,9 @@ Eigen::MatrixXd integrateQuaternion(const Eigen::Vector4d &t_initial_state, cons
  */
     //tictoc.tic();
     //  Define the Chebyshev points on the unit circle
-    const auto x = ComputeChebyshevPoints<number_of_chebyshev_nodes+1>();
+    const auto x = ComputeChebyshevPoints<number_of_chebyshev_nodes>();
 
-    std::array<Eigen::Matrix<double, state_dimension, state_dimension>, number_of_chebyshev_nodes+1> A_stack;
+    std::array<Eigen::Matrix<double, state_dimension, state_dimension>, number_of_chebyshev_nodes> A_stack;
 
     Eigen::Vector3d K;
     Eigen::Matrix<double, state_dimension, state_dimension> A_at_chebyshev_point;
@@ -377,9 +377,9 @@ Eigen::MatrixXd integrateStresses(const Eigen::Matrix<double, 6, 1> t_initial_st
  */
     //tictoc.tic();
     //  Define the Chebyshev points on the unit circle
-    const auto x = ComputeChebyshevPoints<number_of_chebyshev_nodes+1>();
+    const auto x = ComputeChebyshevPoints<number_of_chebyshev_nodes>();
 
-    std::array<Eigen::Matrix<double, state_dimension, state_dimension>, number_of_chebyshev_nodes+1> A_stack;
+    std::array<Eigen::Matrix<double, state_dimension, state_dimension>, number_of_chebyshev_nodes> A_stack;
 
     Eigen::Vector3d K;
     Eigen::Matrix3d K_hat;
