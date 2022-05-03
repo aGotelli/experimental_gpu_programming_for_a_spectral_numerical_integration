@@ -27,7 +27,7 @@ static constexpr unsigned int na = 3;  //  Kirkhoff rod
 static constexpr unsigned int ne = 3;  // dimesion of qe
 
 //  Number of Chebyshev nodes
-static constexpr unsigned int number_of_chebyshev_nodes = 5;
+static constexpr unsigned int number_of_chebyshev_nodes = 6;
 
 
 /*!
@@ -64,22 +64,24 @@ Eigen::MatrixXd getA(const Eigen::Matrix<double, ne*ne, 1> &t_qe)
                                   K(1), -K(2),      0,   K(0),
                                   K(2),  K(1),  -K(0),      0;
 
+
         A_stack[i] = 0.5*A_at_chebyshev_point;
     }
 
     //  Declare the matrix for the system Ax = b
     Eigen::Matrix<double, problem_dimension, problem_dimension> A = Eigen::Matrix<double, problem_dimension, problem_dimension>::Zero();
+    A.setConstant(0);
 
     //  Define a vector containing the indexes of the top left corners of the blocks composing the matrix A
-    const Eigen::VectorXi block_indexes = Eigen::VectorXi::LinSpaced(t_state_dimension, 0, t_number_of_chebyshev_nodes*(t_state_dimension-1));
+    Eigen::VectorXi block_indexes = Eigen::VectorXi::LinSpaced(t_state_dimension, 0, t_number_of_chebyshev_nodes*(t_state_dimension-1));
 
     //  Populate this matrix with all the elements in the right order
-    Eigen::VectorXi point_indexes = block_indexes - Eigen::VectorXi::Constant(t_state_dimension, 1, 1);
     for(unsigned int chebyshev_point=0; chebyshev_point<t_number_of_chebyshev_nodes; chebyshev_point++){
 
         //  Get the current set of indexes for the coefficients of the matrix A at the current chebyshev point
-        point_indexes += Eigen::VectorXi::Constant(t_state_dimension, 1, 1);
-        A(point_indexes, point_indexes) = A_stack[chebyshev_point] ;
+        A(block_indexes, block_indexes) = A_stack[chebyshev_point] ;
+
+        block_indexes += Eigen::VectorXi::Constant(t_state_dimension, 1, 1);
     }
 
     return A;
