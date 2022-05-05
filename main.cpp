@@ -107,6 +107,7 @@ Eigen::MatrixXd integrateQuaternion(const Eigen::Vector4d &t_initial_state, cons
  *  Thus, we can enforce this concept with constexpr classifier so that the values are known at
  *  compile time and we can use templated function for our matrices and vector, which are a bit faster.
  */
+    integrationDirection direction = BOTTOM_TO_TOP;
     //  Dimension of the state
     constexpr unsigned int state_dimension = 4;
     //  Problem size is the total number of elements
@@ -142,7 +143,7 @@ Eigen::MatrixXd integrateQuaternion(const Eigen::Vector4d &t_initial_state, cons
 
     const MatrixNpNp  P = getP<state_dimension, number_of_chebyshev_nodes>();
 
-    const MatrixNchebNcheb Dn = getDn<number_of_chebyshev_nodes>();
+    const MatrixNchebNcheb Dn = getDn<number_of_chebyshev_nodes>(direction);
     const MatrixNpNp D = Eigen::KroneckerProduct(Eigen::MatrixXd::Identity(state_dimension, state_dimension), Dn);
 
 /*  In this part we compute the matrix A and the vector b.
@@ -162,7 +163,7 @@ Eigen::MatrixXd integrateQuaternion(const Eigen::Vector4d &t_initial_state, cons
  */
     //tictoc.tic();
     //  Define the Chebyshev points on the unit circle
-    const auto x = ComputeChebyshevPoints<number_of_chebyshev_nodes>();
+    const auto x = ComputeChebyshevPoints<number_of_chebyshev_nodes>(direction);
 
     std::array<Eigen::Matrix<double, state_dimension, state_dimension>, number_of_chebyshev_nodes> A_stack;
 
@@ -224,6 +225,7 @@ Eigen::MatrixXd integrateQuaternion(const Eigen::Vector4d &t_initial_state, cons
 }
 
 Eigen::MatrixXd integratePositions(const Eigen::Vector3d &t_initial_state,Eigen::MatrixXd t_Q_stack) {
+    integrationDirection direction = BOTTOM_TO_TOP;
 
     std::array<Eigen::Matrix<double, 3, 1>, number_of_chebyshev_nodes> b_stack;
     Eigen::Quaterniond quaternion;
@@ -264,7 +266,7 @@ Eigen::MatrixXd integratePositions(const Eigen::Vector3d &t_initial_state,Eigen:
 
     const MatrixNpNp  P = getP<state_dimension, number_of_chebyshev_nodes>();
 
-    const MatrixNchebNcheb Dn = getDn<number_of_chebyshev_nodes>();
+    const MatrixNchebNcheb Dn = getDn<number_of_chebyshev_nodes>(direction);
     const MatrixNpNp D = Eigen::KroneckerProduct(Eigen::MatrixXd::Identity(state_dimension, state_dimension), Dn);
 
 /*  In this part we compute the matrix A and the vector b.
@@ -327,6 +329,7 @@ Eigen::MatrixXd integrateStresses(const Eigen::Matrix<double, 6, 1> t_initial_st
  *  Thus, we can enforce this concept with constexpr classifier so that the values are known at
  *  compile time and we can use templated function for our matrices and vector, which are a bit faster.
  */
+    integrationDirection direction = TOP_TO_BOTTOM;
     //  Dimension of the state
     constexpr unsigned int state_dimension = 6;
     //  Problem size is the total number of elements
@@ -362,7 +365,7 @@ Eigen::MatrixXd integrateStresses(const Eigen::Matrix<double, 6, 1> t_initial_st
 
     const MatrixNpNp  P = getP<state_dimension, number_of_chebyshev_nodes>();
 
-    const MatrixNchebNcheb Dn = getDn<number_of_chebyshev_nodes>();
+    const MatrixNchebNcheb Dn = getDn<number_of_chebyshev_nodes>(direction);
     const MatrixNpNp D = Eigen::KroneckerProduct(Eigen::MatrixXd::Identity(state_dimension, state_dimension), Dn);
 
 /*  In this part we compute the matrix A and the vector b.
@@ -382,7 +385,7 @@ Eigen::MatrixXd integrateStresses(const Eigen::Matrix<double, 6, 1> t_initial_st
  */
     //tictoc.tic();
     //  Define the Chebyshev points on the unit circle
-    const auto x = ComputeChebyshevPoints<number_of_chebyshev_nodes>();
+    const auto x = ComputeChebyshevPoints<number_of_chebyshev_nodes>(direction);
 
     std::array<Eigen::Matrix<double, state_dimension, state_dimension>, number_of_chebyshev_nodes> A_stack;
 
@@ -447,18 +450,11 @@ Eigen::MatrixXd integrateStresses(const Eigen::Matrix<double, 6, 1> t_initial_st
     return X_stack;
 }
 
-Eigen::MatrixXd integrateGenForces(const Eigen::VectorXd &t_initial_state, const Eigen::MatrixXd t_Lambda_stack) {
+Eigen::MatrixXd integrateGenForces(const Eigen::VectorXd &t_initial_state, const Eigen::MatrixXd t_Lambda_stack, const Eigen::MatrixXd B) {
+    integrationDirection direction = TOP_TO_BOTTOM;
     std::array<Eigen::Matrix<double, 9, 1>, number_of_chebyshev_nodes> b_stack;
 
-    const auto x = ComputeChebyshevPoints<number_of_chebyshev_nodes>();
-    Eigen::Matrix<double, 6, na> B;
-
-    B << 1, 0, 0,
-         0, 1, 0,
-         0, 0, 1,
-         0, 0, 0,
-         0, 0, 0,
-         0, 0, 0;
+    const auto x = ComputeChebyshevPoints<number_of_chebyshev_nodes>(direction);
 
     for (unsigned int i = 0; i < number_of_chebyshev_nodes; ++i) {
         auto lambda = t_Lambda_stack.row(i);
@@ -493,7 +489,7 @@ Eigen::MatrixXd integrateGenForces(const Eigen::VectorXd &t_initial_state, const
 
     const MatrixNpNp  P = getP<state_dimension, number_of_chebyshev_nodes>();
 
-    const MatrixNchebNcheb Dn = getDn<number_of_chebyshev_nodes>();
+    const MatrixNchebNcheb Dn = getDn<number_of_chebyshev_nodes>(direction);
     const MatrixNpNp D = Eigen::KroneckerProduct(Eigen::MatrixXd::Identity(state_dimension, state_dimension), Dn);
 
 /*  In this part we compute the matrix A and the vector b.
@@ -551,12 +547,6 @@ int main()
 {
     tictoc tictoc;
 
-
-    //  Define the initial state
-    const Eigen::Vector4d initial_quaternion(1, 0, 0, 0); // Quaternion case
-    const Eigen::Vector3d initial_position(0, 0, 0); // straight rod
-    const Eigen::Matrix<double, 6, 1> initial_stress(0, 0, 0, 0, 0, 0); //no stresses
-    const Eigen::Matrix<double, 9, 1> initial_gen_forces(0, 0, 0, 0, 0, 0, 0, 0, 0);
     //  Const curvature strain field
     Eigen::VectorXd qe(ne*na);
     //  Here we give some value for the strain
@@ -571,10 +561,35 @@ int main()
             0,
             0;
 
+    //  Define the initial state
+    const Eigen::Vector4d initial_quaternion(1, 0, 0, 0); // Quaternion case
     const auto Q = integrateQuaternion(initial_quaternion, qe);
+
+    const Eigen::Vector3d initial_position(0, 0, 0); // straight rod
     const auto r = integratePositions(initial_position, Q);
+
+    //use quaternion and position at last chebyshev point to construct strain xi at rod tip
+    //build H matrices Hang and Hlin ???
+    //Use equation 1.22 to calculate lambda = H*(xi(rod_tip)-(0, 0, 0, 1, 0, 0)) as initial stress
+    const Eigen::Matrix<double, 6, 1> initial_stress(1, 2, 3, 4, 5, 6); //no stresses
     const auto lambda = integrateStresses(initial_stress, qe);
-    const auto genForces = integrateGenForces(initial_gen_forces, lambda);
+
+    /* TODO:
+     * - put definition of B inside integrateGenForces function
+     * - we can calculate the initial forces inside integrateGenForces function
+     * - define stack of Phi<na, ne>(chebychev_point) globally in order to avoid calculating it over an dover
+     */
+    Eigen::Matrix<double, 6, na> B;
+
+    B << 1, 0, 0,
+         0, 1, 0,
+         0, 0, 1,
+         0, 0, 0,
+         0, 0, 0,
+         0, 0, 0;
+
+    const Eigen::Matrix<double, 9, 1> initial_gen_forces = Phi<na, ne>(1).transpose()*B.transpose()*lambda.row(number_of_chebyshev_nodes-1).transpose();
+    const auto genForces = integrateGenForces(initial_gen_forces, lambda, B);
 
     std::cout << "Q_stack = \n" << Q << '\n' << std::endl;
     std::cout << "r_stack = \n" << r << '\n' << std::endl;

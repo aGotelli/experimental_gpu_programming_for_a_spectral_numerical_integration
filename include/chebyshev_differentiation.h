@@ -10,6 +10,8 @@
 #include <Eigen/Dense>
 #include <iostream>
 
+typedef enum {BOTTOM_TO_TOP, TOP_TO_BOTTOM} integrationDirection;
+
 /*!
  * \brief ComputeChebyshevPoints Computes the Chebyshev points in the given interval
  * \tparam t_N The number of Chebyshev points.
@@ -17,13 +19,13 @@
  * \return An std::array containing the Chebyshev points
  */
 template<unsigned int t_number_of_chebyshev_nodes, unsigned int t_L=1>
-static std::array<double, t_number_of_chebyshev_nodes> ComputeChebyshevPoints()
+static std::array<double, t_number_of_chebyshev_nodes> ComputeChebyshevPoints(const integrationDirection direction)
 {
     std::array<double, t_number_of_chebyshev_nodes> x;
 
-    unsigned int j = 0;
+    unsigned int j = direction == BOTTOM_TO_TOP ? 0 : t_number_of_chebyshev_nodes-1;
     std::generate(x.begin(), x.end(), [&](){
-        return (static_cast<double>(t_L)/2)*(1 +cos( M_PI * static_cast<double>(j++) / static_cast<double>(t_number_of_chebyshev_nodes-1) ));
+        return (static_cast<double>(t_L)/2)*(1 +cos( M_PI * static_cast<double>(direction == BOTTOM_TO_TOP ? j++ : j--) / static_cast<double>(t_number_of_chebyshev_nodes-1) ));
     });
 
     return x;
@@ -57,12 +59,12 @@ static std::array<double, t_number_of_chebyshev_nodes> GetCoefficients_c()
  * \return The Chebyshev differentiation matrix
  */
 template<unsigned int t_number_of_chebyshev_nodes>
-static Eigen::MatrixXd getDn()
+static Eigen::MatrixXd getDn(const integrationDirection direction)
 {
     typedef Eigen::Matrix<double, t_number_of_chebyshev_nodes, t_number_of_chebyshev_nodes> MatrixNN;
 
     //  Define the Chebyshev points on the unit circle
-    const auto x = ComputeChebyshevPoints<t_number_of_chebyshev_nodes>();
+    const auto x = ComputeChebyshevPoints<t_number_of_chebyshev_nodes>(direction);
 
 
     //  Create a matrix every row filled with a point value
