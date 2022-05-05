@@ -84,6 +84,19 @@ Eigen::MatrixXd getA(const std::array<Eigen::Matrix<double, t_state_dimension, t
     return A;
 }
 
+template<unsigned int t_state_dimension>
+Eigen::VectorXd getb(const std::array<Eigen::Matrix<double, t_state_dimension, 1>, number_of_chebyshev_nodes> b_stack) {
+    Eigen::Matrix<double, t_state_dimension*number_of_chebyshev_nodes, 1> b;
+
+    for (unsigned int j = 0; j < t_state_dimension; ++j) {
+        for (unsigned int i = 0; i < number_of_chebyshev_nodes; ++i) {
+            b(i+j*number_of_chebyshev_nodes, 0) = b_stack[i][j];
+        }
+    }
+
+    return b;
+}
+
 Eigen::MatrixXd integrateQuaternion(const Eigen::Vector4d &t_initial_state, const Eigen::VectorXd &t_qe) {
 
 /*  The state dimension and the number of nodes are known. The state dimension will not change
@@ -247,15 +260,7 @@ Eigen::MatrixXd integratePositions(const Eigen::Vector3d &t_initial_state,Eigen:
     //  Declare the matrix for the system Ax = b
     const Eigen::Matrix<double, prob_dimension, prob_dimension> A = Eigen::Matrix<double, prob_dimension, prob_dimension>::Zero();
 
-    VectorNp b = Eigen::Matrix<double, prob_dimension, 1>::Zero();
-
-    //populate b matrix
-    for (unsigned int j = 0; j < state_dimension; ++j) {
-        for (unsigned int i = 0; i < number_of_chebyshev_nodes; ++i) {
-            b(i+j*number_of_chebyshev_nodes, 0) = b_stack[i][j];
-        }
-    }
-
+    VectorNp b = getb<state_dimension>(b_stack);
 
     const MatrixNpNp  P = getP<state_dimension, number_of_chebyshev_nodes>();
 
@@ -442,6 +447,106 @@ Eigen::MatrixXd integrateStresses(const Eigen::Matrix<double, 6, 1> t_initial_st
     return X_stack;
 }
 
+Eigen::MatrixXd integrateGenForces(const Eigen::VectorXd &t_initial_state, const Eigen::MatrixXd t_Lambda_stack) {
+    std::array<Eigen::Matrix<double, 9, 1>, number_of_chebyshev_nodes> b_stack;
+
+    const auto x = ComputeChebyshevPoints<number_of_chebyshev_nodes>();
+    Eigen::Matrix<double, 6, na> B;
+
+    B << 1, 0, 0,
+         0, 1, 0,
+         0, 0, 1,
+         0, 0, 0,
+         0, 0, 0,
+         0, 0, 0;
+
+    for (unsigned int i = 0; i < number_of_chebyshev_nodes; ++i) {
+        auto lambda = t_Lambda_stack.row(i);
+
+        b_stack[i] = Phi<na, ne>(x[i]).transpose()*B.transpose()*lambda.transpose();
+    }
+
+    constexpr unsigned int state_dimension = 9;
+    constexpr unsigned int prob_dimension = number_of_chebyshev_nodes * state_dimension;
+    //  The subset of unknows in the problem
+    constexpr unsigned int unknow_state_dimension = state_dimension * (number_of_chebyshev_nodes - 1);
+
+    /*  These are a set of type definition in order to have a more neat algorithm in
+     *  terms of matrix and vector dymensions
+     */
+    typedef Eigen::Matrix<double, prob_dimension, prob_dimension> MatrixNpNp;
+    typedef Eigen::Matrix<double, prob_dimension, 1> VectorNp;
+
+    typedef Eigen::Matrix<double, prob_dimension, state_dimension> MatrixNpNs;
+
+    typedef Eigen::Matrix<double, unknow_state_dimension, unknow_state_dimension> MatrixNuNu;
+    typedef Eigen::Matrix<double, unknow_state_dimension, 1> VectorNu;
+
+    typedef Eigen::Matrix<double, number_of_chebyshev_nodes, number_of_chebyshev_nodes> MatrixNchebNcheb;
+
+    typedef Eigen::Matrix<double, number_of_chebyshev_nodes, state_dimension, Eigen::ColMajor> MatrixNchebNs;
+
+    //  Declare the matrix for the system Ax = b
+    const Eigen::Matrix<double, prob_dimension, prob_dimension> A = Eigen::Matrix<double, prob_dimension, prob_dimension>::Zero();
+
+    VectorNp b = getb<state_dimension>(b_stack);
+
+    const MatrixNpNp  P = getP<state_dimension, number_of_chebyshev_nodes>();
+
+    const MatrixNchebNcheb Dn = getDn<number_of_chebyshev_nodes>();
+    const MatrixNpNp D = Eigen::KroneckerProduct(Eigen::MatrixXd::Identity(state_dimension, state_dimension), Dn);
+
+/*  In this part we compute the matrix A and the vector b.
+ *  In this case, the elements of the matrix A depends on the strain. As we change the strains during
+ *  simulation, we have to compute the components of A at runtime.
+ *
+ *  Similarly, the vector b contains the values not related to the derivating variable, but that depends on other parameters.
+ *  For example when computing r' = R(Q)*Γ it does not depend on r but only on Q and Γ.
+ *
+ *  We can interpret everything before this point as the setup and everything after as the actual run-time operations.
+ *
+ *  In the following there are some matrices and operation that could be moved in the setup. However I choose to left them
+ *  there for clarity, but feel free to move where you thing it's better.
+ *
+ *  The following is the translation into C++ of the equations presented in the PDF
+ *
+ */
+
+
+    //  Apply transformation of initial condition onto ODE's matrices
+
+    const MatrixNpNp Ap = P.transpose() * A * P;
+    const MatrixNpNp Dp = P.transpose() * D * P;    //  Can be moved in setup
+    const VectorNp bp   = P * b;
+
+
+    //  Compute the ivp
+    const MatrixNpNs D_IT = Dp.block<prob_dimension, state_dimension>(0, 0);    //  Can be moved in setup
+    const MatrixNpNs A_IT = Ap.block<prob_dimension, state_dimension>(0, 0);
+    const VectorNp b_IT = ( D_IT - A_IT ) * t_initial_state;
+
+
+    //  Obtain the section related to the unknows of the problem
+    const MatrixNuNu D_NN = Dp.block<unknow_state_dimension, unknow_state_dimension>(state_dimension, state_dimension);
+    const MatrixNuNu A_NN = Ap.block<unknow_state_dimension, unknow_state_dimension>(state_dimension, state_dimension);
+    const VectorNu ivp = b_IT.block<unknow_state_dimension, 1>(state_dimension, 0);
+    const VectorNu b_NN   = bp.block<unknow_state_dimension, 1>(state_dimension, 0);
+
+    //  Finally compute the states at the unknows Chebyshev points
+    const VectorNu X_NN = (D_NN - A_NN).inverse() * (b_NN - ivp);
+
+    //  We now stack together the initial state on top of the other we just compute
+    //  Then we need to map back to a more readable stack of states
+    const VectorNp X_tilde = P * (VectorNp() << t_initial_state, X_NN).finished();
+
+    //  Then we write the element row-wise
+    const MatrixNchebNs X_stack = Eigen::Map<const MatrixNchebNs>(X_tilde.data());
+
+    writeToFile("R_stack", X_stack);
+
+    return X_stack;
+}
+
 int main()
 {
     tictoc tictoc;
@@ -451,6 +556,7 @@ int main()
     const Eigen::Vector4d initial_quaternion(1, 0, 0, 0); // Quaternion case
     const Eigen::Vector3d initial_position(0, 0, 0); // straight rod
     const Eigen::Matrix<double, 6, 1> initial_stress(0, 0, 0, 0, 0, 0); //no stresses
+    const Eigen::Matrix<double, 9, 1> initial_gen_forces(0, 0, 0, 0, 0, 0, 0, 0, 0);
     //  Const curvature strain field
     Eigen::VectorXd qe(ne*na);
     //  Here we give some value for the strain
@@ -468,10 +574,12 @@ int main()
     const auto Q = integrateQuaternion(initial_quaternion, qe);
     const auto r = integratePositions(initial_position, Q);
     const auto lambda = integrateStresses(initial_stress, qe);
+    const auto genForces = integrateGenForces(initial_gen_forces, lambda);
 
     std::cout << "Q_stack = \n" << Q << '\n' << std::endl;
     std::cout << "r_stack = \n" << r << '\n' << std::endl;
     std::cout << "Lambda_stack \n" << lambda << '\n' << std::endl;
+    std::cout << "Gen_forces_stack \n" << genForces << '\n' << std::endl;
 
     return 0;
 
