@@ -23,6 +23,7 @@ static std::array<double, t_number_of_chebyshev_nodes> ComputeChebyshevPoints(co
 {
     std::array<double, t_number_of_chebyshev_nodes> x;
 
+    //When starting from top, first chebyshev point is num_chebyshev - 1
     unsigned int j = direction == BOTTOM_TO_TOP ? 0 : t_number_of_chebyshev_nodes-1;
     std::generate(x.begin(), x.end(), [&](){
         return (static_cast<double>(t_L)/2)*(1 +cos( M_PI * static_cast<double>(direction == BOTTOM_TO_TOP ? j++ : j--) / static_cast<double>(t_number_of_chebyshev_nodes-1) ));

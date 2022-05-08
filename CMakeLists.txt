@@ -15,5 +15,6 @@ include_directories(include)
 add_executable(spectral_integration main.cpp
                                     include/tictoc.h
                                     include/chebyshev_differentiation.h
-                                    include/spectral_integration_utilities.h)
+                                    include/spectral_integration_utilities.h
+                                    include/lie_algebra_utilities.h)
 target_link_libraries(spectral_integration Eigen3::Eigen)
