@@ -19,6 +19,7 @@
 
 #include "chebyshev_differentiation.h"
 #include "spectral_integration_utilities.h"
+#include "lie_algebra_utilities.h"
 
 #include "tictoc.h"
 
@@ -27,7 +28,7 @@ constexpr unsigned int na = 3;  //  Kirkhoff rod
 constexpr unsigned int ne = 3;  // dimesion of qe
 
 //  Number of Chebyshev nodes
-constexpr unsigned int number_of_chebyshev_nodes = 8;
+constexpr unsigned int number_of_chebyshev_nodes = 11;
 
 
 /*!
@@ -450,11 +451,21 @@ Eigen::MatrixXd integrateStresses(const Eigen::Matrix<double, 6, 1> t_initial_st
     return X_stack;
 }
 
-Eigen::MatrixXd integrateGenForces(const Eigen::VectorXd &t_initial_state, const Eigen::MatrixXd t_Lambda_stack, const Eigen::MatrixXd B) {
+Eigen::MatrixXd integrateGenForces(const Eigen::VectorXd &t_initial_state, const Eigen::MatrixXd t_Lambda_stack) {
     integrationDirection direction = TOP_TO_BOTTOM;
     std::array<Eigen::Matrix<double, 9, 1>, number_of_chebyshev_nodes> b_stack;
 
     const auto x = ComputeChebyshevPoints<number_of_chebyshev_nodes>(direction);
+
+    //define B matrix for generalised forces
+    Eigen::Matrix<double, 6, na> B;
+
+    B << 1, 0, 0,
+         0, 1, 0,
+         0, 0, 1,
+         0, 0, 0,
+         0, 0, 0,
+         0, 0, 0;
 
     for (unsigned int i = 0; i < number_of_chebyshev_nodes; ++i) {
         auto lambda = t_Lambda_stack.row(i);
@@ -568,10 +579,16 @@ int main()
     const Eigen::Vector3d initial_position(0, 0, 0); // straight rod
     const auto r = integratePositions(initial_position, Q);
 
-    //use quaternion and position at last chebyshev point to construct strain xi at rod tip
-    //build H matrices Hang and Hlin ???
-    //Use equation 1.22 to calculate lambda = H*(xi(rod_tip)-(0, 0, 0, 1, 0, 0)) as initial stress
-    const Eigen::Matrix<double, 6, 1> initial_stress(1, 2, 3, 4, 5, 6); //no stresses
+
+    const Eigen::Quaterniond q_at_tip= {Q.row(0)[0],
+                                        Q.row(0)[1],
+                                        Q.row(0)[2],
+                                        Q.row(0)[3]};
+    const Eigen::Matrix<double, 6, 6> Ad_at_tip = Ad(q_at_tip.toRotationMatrix(), Eigen::Vector3d::Zero());
+    Eigen::Matrix<double, 6, 1> F(0, 0, 0, 0, 0, -1);
+
+    const Eigen::Matrix<double, 6, 1> initial_stress = Ad_at_tip.transpose()*F; //no stresses
+    std::cout << "Initial stress: \n" << initial_stress.transpose() << std::endl;
     const auto lambda = integrateStresses(initial_stress, qe);
 
     /* TODO:
@@ -579,17 +596,10 @@ int main()
      * - we can calculate the initial forces inside integrateGenForces function
      * - define stack of Phi<na, ne>(chebychev_point) globally in order to avoid calculating it over an dover
      */
-    Eigen::Matrix<double, 6, na> B;
 
-    B << 1, 0, 0,
-         0, 1, 0,
-         0, 0, 1,
-         0, 0, 0,
-         0, 0, 0,
-         0, 0, 0;
-
-    const Eigen::Matrix<double, 9, 1> initial_gen_forces = Phi<na, ne>(1).transpose()*B.transpose()*lambda.row(number_of_chebyshev_nodes-1).transpose();
-    const auto genForces = integrateGenForces(initial_gen_forces, lambda, B);
+    //refer to equation 2.18
+    const Eigen::Matrix<double, 9, 1> initial_gen_forces(0, 0, 0, 0, 0, 0, 0, 0, 0);
+    const auto genForces = integrateGenForces(initial_gen_forces, lambda);
 
     std::cout << "Q_stack = \n" << Q << '\n' << std::endl;
     std::cout << "r_stack = \n" << r << '\n' << std::endl;
