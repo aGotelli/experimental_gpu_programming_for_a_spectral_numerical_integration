@@ -53,51 +53,6 @@ Eigen::Matrix<double, 3, 3> getHat(const Eigen::Vector3d t_v) {
     return hatMatrix;
 }
 
-/*!
- * \brief getA Compute the matrix A for the system x' = Ax + b
- * \param t_qe The current generalized strains coordinates
- * \tparam t_state_dimension The dimension of the state x
- * \tparam t_number_of_chebyshev_nodes The number of Chebyshev nodes (which also account for the first one)
- * \tparam t_na The number of allowed strain coordinates
- * \tparam t_ne The number of modes per strain coordinate
- * \return
- */
-template<unsigned int t_state_dimension>
-Eigen::MatrixXd getA(const std::array<Eigen::Matrix<double, t_state_dimension, t_state_dimension>, number_of_chebyshev_nodes> t_A_stack)
-{
-    //  Definition of the problem dymension
-    static constexpr unsigned int problem_dimension = t_state_dimension * number_of_chebyshev_nodes;
-
-    //  Declare the matrix for the system Ax = b
-    Eigen::Matrix<double, problem_dimension, problem_dimension> A = Eigen::Matrix<double, problem_dimension, problem_dimension>::Zero();
-
-    //  Define a vector containing the indexes of the top left corners of the blocks composing the matrix A
-    Eigen::VectorXi block_indexes = Eigen::VectorXi::LinSpaced(t_state_dimension, 0, number_of_chebyshev_nodes*(t_state_dimension-1));
-
-    //  Populate this matrix with all the elements in the right order
-
-    for(unsigned int chebyshev_point=0; chebyshev_point<number_of_chebyshev_nodes; chebyshev_point++){
-        A(block_indexes, block_indexes) = t_A_stack[chebyshev_point] ;
-        //  Get the current set of indexes for the coefficients of the matrix A at the current chebyshev point
-        block_indexes += Eigen::VectorXi::Constant(t_state_dimension, 1, 1);
-    }
-
-    return A;
-}
-
-template<unsigned int t_state_dimension>
-Eigen::VectorXd getb(const std::array<Eigen::Matrix<double, t_state_dimension, 1>, number_of_chebyshev_nodes> b_stack) {
-    Eigen::Matrix<double, t_state_dimension*number_of_chebyshev_nodes, 1> b;
-
-    for (unsigned int j = 0; j < t_state_dimension; ++j) {
-        for (unsigned int i = 0; i < number_of_chebyshev_nodes; ++i) {
-            b(i+j*number_of_chebyshev_nodes, 0) = b_stack[i][j];
-        }
-    }
-
-    return b;
-}
-
 Eigen::MatrixXd integrateQuaternion(const Eigen::Vector4d &t_initial_state, const Eigen::VectorXd &t_qe) {
 
 /*  The state dimension and the number of nodes are known. The state dimension will not change
@@ -170,6 +125,12 @@ Eigen::MatrixXd integrateQuaternion(const Eigen::Vector4d &t_initial_state, cons
 
     Eigen::Vector3d K;
     Eigen::Matrix<double, state_dimension, state_dimension> A_at_chebyshev_point;
+    //  Declare the matrix for the system Ax = b
+    Eigen::Matrix<double, prob_dimension, prob_dimension> A = Eigen::Matrix<double, prob_dimension, prob_dimension>::Zero();
+
+    //  Define a vector containing the indexes of the top left corners of the blocks composing the matrix A
+    Eigen::VectorXi block_indexes = Eigen::VectorXi::LinSpaced(state_dimension, 0, number_of_chebyshev_nodes*(state_dimension-1));
+
     for(unsigned int i=0; i < x.size(); i++){
 
         //  Extract the curvature from the strain
@@ -181,12 +142,12 @@ Eigen::MatrixXd integrateQuaternion(const Eigen::Vector4d &t_initial_state, cons
                                   K(1), -K(2),      0,   K(0),
                                   K(2),  K(1),  -K(0),      0;
 
-        A_stack[i] = 0.5*A_at_chebyshev_point;
+        A_at_chebyshev_point = 0.5*A_at_chebyshev_point;
+
+        A(block_indexes, block_indexes) = A_at_chebyshev_point;
+        //  Get the next set of indexes for the coefficients of the matrix A at the next chebyshev point
+        block_indexes += Eigen::VectorXi::Constant(state_dimension, 1, 1);
     }
-
-    const MatrixNpNp A = getA<state_dimension>(A_stack);
-    //tictoc.toc("Time to compute A : ");
-
 
     const VectorNp b = Eigen::Matrix<double, prob_dimension, 1>::Zero();
 
@@ -228,17 +189,6 @@ Eigen::MatrixXd integrateQuaternion(const Eigen::Vector4d &t_initial_state, cons
 Eigen::MatrixXd integratePositions(const Eigen::Vector3d &t_initial_state,Eigen::MatrixXd t_Q_stack) {
     integrationDirection direction = BOTTOM_TO_TOP;
 
-    std::array<Eigen::Matrix<double, 3, 1>, number_of_chebyshev_nodes> b_stack;
-    Eigen::Quaterniond quaternion;
-
-    for (unsigned int i = 0; i < number_of_chebyshev_nodes; ++i) {
-        auto q = t_Q_stack.row(i);
-        quaternion = {q[0], q[1], q[2], q[3]};
-
-
-        b_stack[i] = quaternion.toRotationMatrix()*Eigen::Vector3d(1, 0, 0);
-    }
-
     //dimension = number of chebyshev nodes * 3 because it's a rotation matrix
     constexpr unsigned int state_dimension = 3;
     constexpr unsigned int prob_dimension = number_of_chebyshev_nodes * state_dimension;
@@ -263,7 +213,20 @@ Eigen::MatrixXd integratePositions(const Eigen::Vector3d &t_initial_state,Eigen:
     //  Declare the matrix for the system Ax = b
     const Eigen::Matrix<double, prob_dimension, prob_dimension> A = Eigen::Matrix<double, prob_dimension, prob_dimension>::Zero();
 
-    VectorNp b = getb<state_dimension>(b_stack);
+    Eigen::Matrix<double, prob_dimension, 1> b;
+    Eigen::Quaterniond quaternion;
+
+    for (unsigned int i = 0; i < number_of_chebyshev_nodes; ++i) {
+        auto q = t_Q_stack.row(i);
+        quaternion = {q[0], q[1], q[2], q[3]};
+
+
+        Eigen::Matrix<double, state_dimension, 1> b_at_ch_point = quaternion.toRotationMatrix()*Eigen::Vector3d(1, 0, 0);
+
+        for (unsigned int j = 0; j < state_dimension; ++j) {
+            b(i+j*number_of_chebyshev_nodes, 0) = b_at_ch_point(j);
+        }
+    }
 
     const MatrixNpNp  P = getP<state_dimension, number_of_chebyshev_nodes>();
 
@@ -395,6 +358,12 @@ Eigen::MatrixXd integrateStresses(const Eigen::Matrix<double, 6, 1> t_initial_st
     const auto Gamma_hat = getHat(Eigen::Vector3d(1, 0, 0));
     Eigen::Matrix<double, state_dimension, state_dimension> ad_xi;
 
+    //  Declare the matrix for the system Ax = b
+    Eigen::Matrix<double, prob_dimension, prob_dimension> A = Eigen::Matrix<double, prob_dimension, prob_dimension>::Zero();
+
+    //  Define a vector containing the indexes of the top left corners of the blocks composing the matrix A
+    Eigen::VectorXi block_indexes = Eigen::VectorXi::LinSpaced(state_dimension, 0, number_of_chebyshev_nodes*(state_dimension-1));
+
     for(unsigned int i=0; i<x.size(); i++){
 
         //  Extract the curvature from the strain
@@ -406,13 +375,10 @@ Eigen::MatrixXd integrateStresses(const Eigen::Matrix<double, 6, 1> t_initial_st
         ad_xi.block<3, 3>(3, 0) = Gamma_hat;
         ad_xi.block<3, 3>(3, 3) = K_hat;
 
-        A_stack[i] = ad_xi.transpose();
+        A(block_indexes, block_indexes) = ad_xi.transpose();
+        //  Get the next set of indexes for the coefficients of the matrix A at the next chebyshev point
+        block_indexes += Eigen::VectorXi::Constant(state_dimension, 1, 1);
     }
-
-    //const MatrixNpNp A = getA<state_dimension, number_of_chebyshev_nodes, na, ne>(t_qe);
-    //tictoc.toc("Time to compute A : ");
-    const MatrixNpNp A = getA<state_dimension>(A_stack);
-
 
     const VectorNp b = Eigen::Matrix<double, prob_dimension, 1>::Zero();
 
@@ -453,25 +419,6 @@ Eigen::MatrixXd integrateStresses(const Eigen::Matrix<double, 6, 1> t_initial_st
 
 Eigen::MatrixXd integrateGenForces(const Eigen::VectorXd &t_initial_state, const Eigen::MatrixXd t_Lambda_stack) {
     integrationDirection direction = TOP_TO_BOTTOM;
-    std::array<Eigen::Matrix<double, 9, 1>, number_of_chebyshev_nodes> b_stack;
-
-    const auto x = ComputeChebyshevPoints<number_of_chebyshev_nodes>(direction);
-
-    //define B matrix for generalised forces
-    Eigen::Matrix<double, 6, na> B;
-
-    B << 1, 0, 0,
-         0, 1, 0,
-         0, 0, 1,
-         0, 0, 0,
-         0, 0, 0,
-         0, 0, 0;
-
-    for (unsigned int i = 0; i < number_of_chebyshev_nodes; ++i) {
-        auto lambda = t_Lambda_stack.row(i);
-
-        b_stack[i] = Phi<na, ne>(x[i]).transpose()*B.transpose()*lambda.transpose();
-    }
 
     constexpr unsigned int state_dimension = 9;
     constexpr unsigned int prob_dimension = number_of_chebyshev_nodes * state_dimension;
@@ -496,7 +443,32 @@ Eigen::MatrixXd integrateGenForces(const Eigen::VectorXd &t_initial_state, const
     //  Declare the matrix for the system Ax = b
     const Eigen::Matrix<double, prob_dimension, prob_dimension> A = Eigen::Matrix<double, prob_dimension, prob_dimension>::Zero();
 
-    VectorNp b = getb<state_dimension>(b_stack);
+    std::array<Eigen::Matrix<double, 9, 1>, number_of_chebyshev_nodes> b_stack;
+
+    const auto x = ComputeChebyshevPoints<number_of_chebyshev_nodes>(direction);
+
+    //define B matrix for generalised forces
+    Eigen::Matrix<double, 6, na> B;
+
+    B << 1, 0, 0,
+         0, 1, 0,
+         0, 0, 1,
+         0, 0, 0,
+         0, 0, 0,
+         0, 0, 0;
+
+    Eigen::Matrix<double, prob_dimension, 1> b;
+    Eigen::Quaterniond quaternion;
+
+    for (unsigned int i = 0; i < number_of_chebyshev_nodes; ++i) {
+        auto lambda = t_Lambda_stack.row(i);
+
+        Eigen::Matrix<double, state_dimension, 1> b_at_ch_point = Phi<na, ne>(x[i]).transpose()*B.transpose()*lambda.transpose();
+
+        for (unsigned int j = 0; j < state_dimension; ++j) {
+            b(i+j*number_of_chebyshev_nodes, 0) = b_at_ch_point(j);
+        }
+    }
 
     const MatrixNpNp  P = getP<state_dimension, number_of_chebyshev_nodes>();
 
@@ -588,7 +560,6 @@ int main()
     Eigen::Matrix<double, 6, 1> F(0, 0, 0, 0, 0, -1);
 
     const Eigen::Matrix<double, 6, 1> initial_stress = Ad_at_tip.transpose()*F; //no stresses
-    std::cout << "Initial stress: \n" << initial_stress.transpose() << std::endl;
     const auto lambda = integrateStresses(initial_stress, qe);
 
     /* TODO:
