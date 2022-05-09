@@ -92,33 +92,3 @@ int main()
 
 
 }
-
-
-void writeToFile(std::string t_name,
-                 const Eigen::MatrixXd &t_matrix,
-                 std::string t_relative_path_from_build,
-                 const Eigen::IOFormat &t_format)
-{
-    if(not t_relative_path_from_build.empty()){
-        //  Ensure relative path ends with a backslash only if a path is given
-        if(not t_relative_path_from_build.ends_with('/'))
-            t_relative_path_from_build.append("/");
-    }
-
-
-    //  Ensure it ends with .csv
-    if(t_name.find(".csv") == std::string::npos)
-        t_name.append(".csv");
-
-    //  The file will be created in the location given by the realtive path and with the given name
-    const auto file_name_and_location = t_relative_path_from_build + t_name;
-
-    //  Create file in given location with given name
-    std::ofstream file(file_name_and_location.c_str());
-
-    //  Put matrix in this file
-    file << t_matrix.format(t_format);
-
-    //  Close the file
-    file.close();
- }

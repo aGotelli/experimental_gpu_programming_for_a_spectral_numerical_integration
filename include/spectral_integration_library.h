@@ -19,49 +19,32 @@ constexpr unsigned int number_of_chebyshev_nodes = 11;
  */
 void writeToFile(std::string t_name,
                  const Eigen::MatrixXd &t_matrix,
-                 std::string t_relative_path_from_build="",
-                 const Eigen::IOFormat &t_format=Eigen::IOFormat(16, 0, ","));
-
-/*!
- * \brief getA Compute the matrix A for the system x' = Ax + b
- * \param t_qe The current generalized strains coordinates
- * \tparam t_state_dimension The dimension of the state x
- * \tparam t_number_of_chebyshev_nodes The number of Chebyshev nodes (which also account for the first one)
- * \tparam t_na The number of allowed strain coordinates
- * \tparam t_ne The number of modes per strain coordinate
- * \return
- */
-template<unsigned int t_state_dimension>
-Eigen::MatrixXd getA(const std::array<Eigen::Matrix<double, t_state_dimension, t_state_dimension>, number_of_chebyshev_nodes> t_A_stack)
+                 std::string t_relative_path_from_build = "",
+                 const Eigen::IOFormat &t_format = Eigen::IOFormat(16, 0, ","))
 {
-
-    static constexpr unsigned int problem_dimension = t_state_dimension * number_of_chebyshev_nodes;
-
-    Eigen::Matrix<double, problem_dimension, problem_dimension> A = Eigen::Matrix<double, problem_dimension, problem_dimension>::Zero();
-
-    Eigen::VectorXi block_indexes = Eigen::VectorXi::LinSpaced(t_state_dimension, 0, number_of_chebyshev_nodes*(t_state_dimension-1));
-
-    for(unsigned int chebyshev_point=0; chebyshev_point<number_of_chebyshev_nodes; chebyshev_point++){
-        A(block_indexes, block_indexes) = t_A_stack[chebyshev_point] ;
-        
-        block_indexes += Eigen::VectorXi::Constant(t_state_dimension, 1, 1);
+    if(not t_relative_path_from_build.empty()){
+        //  Ensure relative path ends with a backslash only if a path is given
+        if(not t_relative_path_from_build.ends_with('/'))
+            t_relative_path_from_build.append("/");
     }
 
-    return A;
-}                 
 
-template<unsigned int t_state_dimension>
-Eigen::VectorXd getb(const std::array<Eigen::Matrix<double, t_state_dimension, 1>, number_of_chebyshev_nodes> b_stack) {
-    Eigen::Matrix<double, t_state_dimension*number_of_chebyshev_nodes, 1> b;
+    //  Ensure it ends with .csv
+    if(t_name.find(".csv") == std::string::npos)
+        t_name.append(".csv");
 
-    for (unsigned int j = 0; j < t_state_dimension; ++j) {
-        for (unsigned int i = 0; i < number_of_chebyshev_nodes; ++i) {
-            b(i+j*number_of_chebyshev_nodes, 0) = b_stack[i][j];
-        }
-    }
+    //  The file will be created in the location given by the realtive path and with the given name
+    const auto file_name_and_location = t_relative_path_from_build + t_name;
 
-    return b;
-}
+    //  Create file in given location with given name
+    std::ofstream file(file_name_and_location.c_str());
+
+    //  Put matrix in this file
+    file << t_matrix.format(t_format);
+
+    //  Close the file
+    file.close();
+ }
 
 Eigen::Matrix<double, 3, 3> getHat(const Eigen::Vector3d t_v) {
     Eigen::Matrix<double, 3, 3> hatMatrix;
