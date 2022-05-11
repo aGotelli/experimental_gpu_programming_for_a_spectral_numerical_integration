@@ -2,6 +2,7 @@
 #define SPECTRAL_INTEGRATION_LIBRARY_H
 
 #include <Eigen/Dense>
+#include <fstream>
 #include "chebyshev_differentiation.h"
 #include "spectral_integration_utilities.h"
 
@@ -89,9 +90,6 @@ static const Eigen::MatrixXd integrateQuaternion(const Eigen::Vector4d &t_initia
     //  Declare the matrix for the system Ax = b
     Eigen::Matrix<double, prob_dimension, prob_dimension> A = Eigen::Matrix<double, prob_dimension, prob_dimension>::Zero();
 
-    //  Define a vector containing the indexes of the top left corners of the blocks composing the matrix A
-    Eigen::VectorXi block_indexes = Eigen::VectorXi::LinSpaced(state_dimension, 0, number_of_chebyshev_nodes*(state_dimension-1));
-
     for(unsigned int i=0; i < x.size(); i++){
 
         //  Extract the curvature from the strain
@@ -105,9 +103,13 @@ static const Eigen::MatrixXd integrateQuaternion(const Eigen::Vector4d &t_initia
 
         A_at_chebyshev_point = 0.5*A_at_chebyshev_point;
 
-        A(block_indexes, block_indexes) = A_at_chebyshev_point;
-        //  Get the next set of indexes for the coefficients of the matrix A at the next chebyshev point
-        block_indexes += Eigen::VectorXi::Constant(state_dimension, 1, 1);
+        for (unsigned int row = 0; row < A_at_chebyshev_point.rows(); ++row) {
+            for (unsigned int col = 0; col < A_at_chebyshev_point.cols(); ++col) {
+                int row_index = row*number_of_chebyshev_nodes+i;
+                int col_index = col*number_of_chebyshev_nodes+i;
+                A(row_index, col_index) = A_at_chebyshev_point(row, col);
+            }
+        }
     }
 
     const VectorNp b = Eigen::Matrix<double, prob_dimension, 1>::Zero();
@@ -242,9 +244,6 @@ Eigen::MatrixXd integrateStresses(const Eigen::Matrix<double, 6, 1> t_initial_st
     //  Declare the matrix for the system Ax = b
     Eigen::Matrix<double, prob_dimension, prob_dimension> A = Eigen::Matrix<double, prob_dimension, prob_dimension>::Zero();
 
-    //  Define a vector containing the indexes of the top left corners of the blocks composing the matrix A
-    Eigen::VectorXi block_indexes = Eigen::VectorXi::LinSpaced(state_dimension, 0, number_of_chebyshev_nodes*(state_dimension-1));
-
     for(unsigned int i=0; i<x.size(); i++){
 
         //  Extract the curvature from the strain
@@ -256,9 +255,13 @@ Eigen::MatrixXd integrateStresses(const Eigen::Matrix<double, 6, 1> t_initial_st
         ad_xi.block<3, 3>(3, 0) = Gamma_hat;
         ad_xi.block<3, 3>(3, 3) = K_hat;
 
-        A(block_indexes, block_indexes) = ad_xi.transpose();
-        //  Get the next set of indexes for the coefficients of the matrix A at the next chebyshev point
-        block_indexes += Eigen::VectorXi::Constant(state_dimension, 1, 1);
+        for (unsigned int row = 0; row < ad_xi.rows(); ++row) {
+            for (unsigned int col = 0; col < ad_xi.cols(); ++col) {
+                int row_index = row*number_of_chebyshev_nodes+i;
+                int col_index = col*number_of_chebyshev_nodes+i;
+                A(row_index, col_index) = ad_xi.transpose()(row, col);
+            }
+        }
     }
 
     const VectorNp b = Eigen::Matrix<double, prob_dimension, 1>::Zero();
