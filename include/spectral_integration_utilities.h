@@ -11,6 +11,8 @@
 #include <unsupported/Eigen/KroneckerProduct>
 
 #include <boost/math/special_functions/legendre.hpp>
+#include <array>
+#include "chebyshev_differentiation.h"
 
 /*!
  * \brief Phi Compute the basis matrix Phi for a given X
@@ -19,22 +21,24 @@
  * \tparam t_ne The number of modes per strain coordinate
  * \return The basis matrix Phi for a given X
  */
-template<unsigned int t_na, unsigned int t_ne>
-static const Eigen::MatrixXd Phi(const double t_X, const double &t_begin=0, const double &t_end=1)
+template<unsigned int t_na, unsigned int t_ne, unsigned int numNodes>
+static const std::array<Eigen::MatrixXd, numNodes> Phi(const std::array<double, numNodes> t_X, const double &t_begin=0, const double &t_end=1)
 {
+    std::array<Eigen::MatrixXd, numNodes> Phi;
 
-    //  The coordinate must be transposed into the Chebyshev domain [-1, 1];
-    double x = ( 2 * t_X - ( t_end + t_begin) ) / ( t_end - t_begin );
+    for (unsigned int i = 0; i < numNodes; ++i) {
+        //  The coordinate must be transposed into the Chebyshev domain [-1, 1];
+        double x = ( 2 * t_X[i] - ( t_end + t_begin) ) / ( t_end - t_begin );
 
-    //  Compute the values of the polynomial for every element of the strain field
-    Eigen::Matrix<double, t_ne, 1> Phi_i;
-    for(unsigned int i=0; i<t_ne; i++)
-        Phi_i[i] = boost::math::legendre_p(i, x);
+        //  Compute the values of the polynomial for every element of the strain field
+        Eigen::Matrix<double, t_ne, 1> Phi_i;
+        for(unsigned int i=0; i<t_ne; i++)
+            Phi_i[i] = boost::math::legendre_p(i, x);
 
 
-    //  Define the matrix of bases
-    Eigen::MatrixXd Phi = Eigen::KroneckerProduct(Eigen::Matrix<double, t_na, t_na>::Identity(), Phi_i.transpose());
-
+        //  Define the matrix of bases
+        Phi[i] = Eigen::KroneckerProduct(Eigen::Matrix<double, t_na, t_na>::Identity(), Phi_i.transpose());
+    }
 
     return Phi;
 }
