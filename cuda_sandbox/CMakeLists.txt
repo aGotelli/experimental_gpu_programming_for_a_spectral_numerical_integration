@@ -1,9 +1,13 @@
 # ---[ Check cmake version.
-cmake_minimum_required(VERSION 3.16.0 FATAL_ERROR)
+cmake_minimum_required(VERSION 3.18.0 FATAL_ERROR)
+
+#set(CMAKE_CUDA_COMPILER /usr/local/cuda/bin/nvcc)
+#set(CMAKE_CUDA_COMPILER /usr/local/cuda-11.7/lib64)
+
 
 
 # ---[ Project specification.
-project(cuda_sandbox LANGUAGES C CXX CUDA)
+project(cuda_sandbox LANGUAGES CXX CUDA)
 
 include(GNUInstallDirs)
 
@@ -37,8 +41,8 @@ set(CMAKE_CUDA_STANDARD_REQUIRED ON)
 set(CMAKE_CUDA_EXTENSIONS OFF)
 
 #                                       needed to pass lambdas to kernels
-SET(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS}  --expt-extended-lambda; # --opt-level=4 
-)
+#SET(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS}  --expt-extended-lambda; # --opt-level=4 
+#)
 
 SET(CUDA_PROPAGATE_HOST_FLAGS ON)
 SET(CUDA_SEPARABLE_COMPILATION OFF)
@@ -73,6 +77,7 @@ target_link_libraries(${PROJECT_NAME}_matrix_multiplication
         cublas
         Eigen3::Eigen
 )
+set_target_properties(${PROJECT_NAME}_matrix_multiplication PROPERTIES CUDA_ARCHITECTURES OFF)
 
 
 
@@ -96,6 +101,7 @@ target_link_libraries(${PROJECT_NAME}_matrix_inverse
         cusolverMg
         Eigen3::Eigen
 )
+set_target_properties(${PROJECT_NAME}_matrix_inverse PROPERTIES CUDA_ARCHITECTURES OFF)
 
 
 
