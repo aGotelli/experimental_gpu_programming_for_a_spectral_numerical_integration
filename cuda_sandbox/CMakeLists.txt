@@ -46,25 +46,20 @@ set(CMAKE_CUDA_EXTENSIONS OFF)
 
 SET(CUDA_PROPAGATE_HOST_FLAGS ON)
 SET(CUDA_SEPARABLE_COMPILATION OFF)
-SET(CUDA_VERBOSE_BUILD OFF)
+SET(CUDA_VERBOSE_BUILD ON)
 
 # Debug options
-#set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS} -O0 -g")
-#set(CMAKE_CUDA_FLAGS_DEBUG "${CMAKE_CUDA_FLAGS} -O0 -g -lineinfo")
+set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS} -O0 -g")
+set(CMAKE_CUDA_FLAGS_DEBUG "${CMAKE_CUDA_FLAGS} -O0 -g -lineinfo")
 
 find_package(Eigen3 3.4 REQUIRED NO_MODULE)
 
 # ##########################################
 # cusolver_examples target
 # ##########################################
-#include(../cmake/cusolver_example.cmake)
-
-#include_directories("${CMAKE_SOURCE_DIR}/../utils")
-
 include_directories(include)
 
 
-#add_cusolver_example(cusolver_examples "cusolver_getrf_example" cusolver_getrf_example.cu)
 add_executable(${PROJECT_NAME}_matrix_multiplication 
 		src/matrix_multiplication/example_matrix_multiplication.cu
                 include/tictoc.h)
