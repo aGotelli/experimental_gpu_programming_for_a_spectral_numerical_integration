@@ -1,7 +1,7 @@
 # ---[ Check cmake version.
 cmake_minimum_required(VERSION 3.18.0 FATAL_ERROR)
 
-#set(CMAKE_CUDA_COMPILER /usr/local/cuda/bin/nvcc)
+set(CMAKE_CUDA_COMPILER /usr/local/cuda/bin/nvcc)
 #set(CMAKE_CUDA_COMPILER /usr/local/cuda-11.7/lib64)
 
 
