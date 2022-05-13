@@ -57,7 +57,7 @@ int main(int argc, char *argv[])
 
 
 
-    int colsA = 120;
+    int colsA = 80;
     int rowsA = colsA;
     int NN = colsA;
     int MM = rowsA;
@@ -136,7 +136,16 @@ int main(int argc, char *argv[])
     int lwork = 0;            /* size of workspace */
     double *d_work = nullptr; /* device workspace for getrf */
 
-    const int pivot_on = 1; // pivot off is not numerically stable
+    const int pivot_on = 0; // pivot off is not numerically stable
+    /*
+    For the pivoting we reeeeeeeally slow things down a lot.
+    Hoever it is necessary if we have zeros at (0, 0).
+    So we really need to check the matrices before insterting or not the pivoting.
+    
+
+    I think (and hope) that we do not need it.
+
+    */
 
 
     /* step 1: create cusolver handle, bind a stream
