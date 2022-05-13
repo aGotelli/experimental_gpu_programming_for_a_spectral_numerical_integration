@@ -72,7 +72,7 @@ target_link_libraries(${PROJECT_NAME}_matrix_multiplication
         cublas
         Eigen3::Eigen
 )
-set_target_properties(${PROJECT_NAME}_matrix_multiplication PROPERTIES CUDA_ARCHITECTURES OFF)
+#set_target_properties(${PROJECT_NAME}_matrix_multiplication PROPERTIES CUDA_ARCHITECTURES OFF)
 
 
 
@@ -96,7 +96,7 @@ target_link_libraries(${PROJECT_NAME}_matrix_inverse
         cusolverMg
         Eigen3::Eigen
 )
-set_target_properties(${PROJECT_NAME}_matrix_inverse PROPERTIES CUDA_ARCHITECTURES OFF)
+#set_target_properties(${PROJECT_NAME}_matrix_inverse PROPERTIES CUDA_ARCHITECTURES OFF)
 
 
 
