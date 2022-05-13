@@ -251,8 +251,9 @@ int main(int argc, char *argv[])
     This is necessary as I will need to print
     
     */
-    CUDA_CHECK(cudaMemcpyAsync(PAP.data(), d_PAP, sizeof(data_type) * P.size(), cudaMemcpyDeviceToHost,
-                               stream));
+    CUDA_CHECK(
+        cudaMemcpyAsync(PAP.data(), d_PAP, sizeof(data_type) * P.size(), cudaMemcpyDeviceToHost,stream)
+    );
 
 
     /*
