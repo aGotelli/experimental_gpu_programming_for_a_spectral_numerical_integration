@@ -35,8 +35,6 @@ constexpr double rodDensity =  7874;
 //1cm radius
 const double rodCrossSec = M_PI * pow(0.01, 2);
 
-constexpr double rodLength = 1;
-
 //gravitational acceleration
 constexpr double g = 9.8067;
 
@@ -44,13 +42,13 @@ template<unsigned int t_stateDimension>
 Eigen::MatrixXd getQuaternionA(Eigen::VectorXd &t_qe) {
     constexpr integrationDirection direction = BOTTOM_TO_TOP;
 
-    constexpr unsigned int problemDimension = t_stateDimension*number_of_chebyshev_nodes;
+    constexpr unsigned int probDimension = t_stateDimension*number_of_chebyshev_nodes;
 
     Eigen::Vector3d K;
     Eigen::Matrix<double, t_stateDimension, t_stateDimension> A_at_chebyshev_point;
     //  Declare the matrix for the system Ax = b
-    Eigen::Matrix<double, problemDimension, problemDimension> A =
-            Eigen::Matrix<double, problemDimension, problemDimension>::Zero();
+    Eigen::Matrix<double, probDimension, probDimension> A =
+            Eigen::Matrix<double, probDimension, probDimension>::Zero();
 
     for(unsigned int i=0; i < number_of_chebyshev_nodes; i++){
 
@@ -79,9 +77,9 @@ Eigen::MatrixXd getQuaternionA(Eigen::VectorXd &t_qe) {
 
 template<unsigned int t_stateDimension>
 Eigen::MatrixXd getPositionb(Eigen::MatrixXd t_Q) {
-    constexpr unsigned int positionProblemDimension = t_stateDimension * number_of_chebyshev_nodes;
+    constexpr unsigned int probDimension = t_stateDimension * number_of_chebyshev_nodes;
 
-    Eigen::Matrix<double, positionProblemDimension, 1> b;
+    Eigen::Matrix<double, probDimension, 1> b;
     Eigen::Quaterniond quaternion;
 
     for (unsigned int i = 0; i < number_of_chebyshev_nodes; ++i) {
@@ -102,10 +100,7 @@ Eigen::MatrixXd getPositionb(Eigen::MatrixXd t_Q) {
 Eigen::MatrixXd getStressesA(Eigen::VectorXd &t_qe) {
     constexpr integrationDirection direction = TOP_TO_BOTTOM;
     constexpr unsigned int t_stateDimension = 6;
-    constexpr unsigned int stressesProbDimension = t_stateDimension * number_of_chebyshev_nodes;
-
-    //  Define the Chebyshev points on the unit circle
-    const auto stresses_ch_points = chebyshev_points[direction];
+    constexpr unsigned int probDimension = t_stateDimension * number_of_chebyshev_nodes;
 
     Eigen::Vector3d K;
     Eigen::Matrix3d K_hat;
@@ -113,8 +108,8 @@ Eigen::MatrixXd getStressesA(Eigen::VectorXd &t_qe) {
     Eigen::Matrix<double, t_stateDimension, t_stateDimension> ad_xi;
 
     //  Declare the matrix for the system Ax = b
-    Eigen::Matrix<double, stressesProbDimension, stressesProbDimension> A
-            = Eigen::Matrix<double, stressesProbDimension, stressesProbDimension>::Zero();
+    Eigen::Matrix<double, probDimension, probDimension> A
+            = Eigen::Matrix<double, probDimension, probDimension>::Zero();
 
     for(unsigned int i=0; i < number_of_chebyshev_nodes; i++){
 
@@ -139,13 +134,36 @@ Eigen::MatrixXd getStressesA(Eigen::VectorXd &t_qe) {
     return A;
 }
 
+template <unsigned int t_stateDimension>
+Eigen::MatrixXd getStressesb(Eigen::MatrixXd t_Q) {
+    constexpr unsigned int probDimension = t_stateDimension * number_of_chebyshev_nodes;
+
+    Eigen::Matrix<double, probDimension, 1> b;
+    Eigen::Quaterniond quaternion;
+
+    const double rodSpecWeight = rodDensity*rodCrossSec;
+    const double gravForces = rodSpecWeight*g;
+
+    for (unsigned int i = 0; i < number_of_chebyshev_nodes; ++i) {
+        auto q = t_Q.row(i);
+        quaternion = {q[0], q[1], q[2], q[3]};
+
+        Eigen::Matrix<double, t_stateDimension, 1> F_ext = {0, 0, 0, 0, 0, gravForces};
+
+        Eigen::Matrix<double, t_stateDimension, 1> b_at_ch_point = Ad(quaternion.toRotationMatrix(), Eigen::Vector3d::Zero())*F_ext;
+
+        for (unsigned int j = 0; j < t_stateDimension; ++j) {
+            b(i+j*number_of_chebyshev_nodes, 0) = b_at_ch_point(j);
+        }
+    }
+
+    return b;
+}
+
 Eigen::VectorXd getInitialStress(Eigen::Quaterniond t_q) {
     const Eigen::Matrix<double, 6, 6> Ad_at_tip = Ad(t_q.toRotationMatrix(), Eigen::Vector3d::Zero());
 
-    const double rodWeight = rodDensity*rodCrossSec*rodLength;
-    const double gravForce = rodWeight*g;
-
-    Eigen::Matrix<double, 6, 1> F(0, 0, 0, 0, 0, -gravForce);
+    Eigen::Matrix<double, 6, 1> F(0, 0, 0, 0, 0, -1);
 
     return Ad_at_tip.transpose()*F; //no stresses
 }
@@ -203,7 +221,7 @@ int main()
     constexpr unsigned int qStateDimension = 4;
     constexpr unsigned int problemDimension = qStateDimension * number_of_chebyshev_nodes;
     const auto q_A = getQuaternionA<qStateDimension>(qe);
-    const Eigen::Matrix<double, problemDimension, 1> q_b = Eigen::Matrix<double, problemDimension, 1>::Zero();
+    const auto q_b = Eigen::Matrix<double, problemDimension, 1>::Zero();
     //  Define the initial state
     const Eigen::Vector4d initial_quaternion(1, 0, 0, 0); // Quaternion case
     const auto Q = integrateODE<qStateDimension>(initial_quaternion, q_A, q_b, BOTTOM_TO_TOP, "Q_stack");
@@ -212,8 +230,7 @@ int main()
     constexpr integrationDirection positionDirection = BOTTOM_TO_TOP;
     constexpr unsigned int positionStateDimension = 3;
     constexpr unsigned int positionProblemDimension = positionStateDimension * number_of_chebyshev_nodes;
-    const Eigen::Matrix<double, positionProblemDimension, positionProblemDimension> position_A
-            = Eigen::Matrix<double, positionProblemDimension, positionProblemDimension>::Zero();
+    const auto position_A = Eigen::Matrix<double, positionProblemDimension, positionProblemDimension>::Zero();
 
     const auto position_b = getPositionb<positionStateDimension>(Q);
 
@@ -224,13 +241,12 @@ int main()
     //Stresses
     constexpr integrationDirection lambdaDirection = TOP_TO_BOTTOM;
     constexpr unsigned int lambdaStateDimension = 6;
-    constexpr unsigned int lambdaProbDimension = lambdaStateDimension * number_of_chebyshev_nodes;
 
     const auto stresses_A = getStressesA(qe);
 
-    const Eigen::Matrix<double, lambdaProbDimension, 1> stresses_b = Eigen::Matrix<double, lambdaProbDimension, 1>::Zero();
+    const auto stresses_b = getStressesb<lambdaStateDimension>(Q);
 
-    const Eigen::Matrix<double, 6, 1> initial_stress = getInitialStress(Eigen::Quaterniond(Q.row(0)[0],
+    const auto initial_stress = getInitialStress(Eigen::Quaterniond(Q.row(0)[0],
                                                                        Q.row(0)[1],
                                                                        Q.row(0)[2],
                                                                        Q.row(0)[3]));
@@ -242,8 +258,7 @@ int main()
     constexpr integrationDirection forcesDirection = TOP_TO_BOTTOM;
 
     //  Declare the matrix for the system Ax = b
-    const Eigen::Matrix<double, QadProbDimension, QadProbDimension> forces_A
-            = Eigen::Matrix<double, QadProbDimension, QadProbDimension>::Zero();
+    const auto forces_A = Eigen::Matrix<double, QadProbDimension, QadProbDimension>::Zero();
 
     const auto forces_b = getQadb<QadStateDimension>(lambda);
 
