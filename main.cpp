@@ -29,6 +29,17 @@ const auto Phi_top_down = Phi<na, ne, number_of_chebyshev_nodes>(chebyshev_point
 const auto Phi_bottom_up = Phi<na, ne, number_of_chebyshev_nodes>(chebyshev_points[BOTTOM_TO_TOP]);
 const std::array<std::array<Eigen::MatrixXd, number_of_chebyshev_nodes>, 2> Phi_matrix = {Phi_bottom_up, Phi_top_down};
 
+//density of iron [kg/m^3]
+constexpr double rodDensity =  7874;
+
+//1cm radius
+const double rodCrossSec = M_PI * pow(0.01, 2);
+
+constexpr double rodLength = 1;
+
+//gravitational acceleration
+constexpr double g = 9.8067;
+
 template<unsigned int t_stateDimension>
 Eigen::MatrixXd getQuaternionA(Eigen::VectorXd &t_qe) {
     constexpr integrationDirection direction = BOTTOM_TO_TOP;
@@ -130,7 +141,11 @@ Eigen::MatrixXd getStressesA(Eigen::VectorXd &t_qe) {
 
 Eigen::VectorXd getInitialStress(Eigen::Quaterniond t_q) {
     const Eigen::Matrix<double, 6, 6> Ad_at_tip = Ad(t_q.toRotationMatrix(), Eigen::Vector3d::Zero());
-    Eigen::Matrix<double, 6, 1> F(0, 0, 0, 0, 0, -1);
+
+    const double rodWeight = rodDensity*rodCrossSec*rodLength;
+    const double gravForce = rodWeight*g;
+
+    Eigen::Matrix<double, 6, 1> F(0, 0, 0, 0, 0, -gravForce);
 
     return Ad_at_tip.transpose()*F; //no stresses
 }
