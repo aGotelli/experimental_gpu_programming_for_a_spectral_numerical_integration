@@ -221,7 +221,7 @@ int main(int argc, char *argv[])
     lu_factorization.toc("LU factorization");
 
 
-   inversion.tic();
+    inversion.tic();
 
     /*
      * step 5: solve A*X = B

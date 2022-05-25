@@ -144,16 +144,17 @@ Eigen::MatrixXd getStressesb(Eigen::MatrixXd t_Q) {
     const double rodSpecWeight = rodDensity*rodCrossSec;
     const double gravForces = rodSpecWeight*g;
 
-    for (unsigned int i = 0; i < number_of_chebyshev_nodes; ++i) {
+    Eigen::Matrix<double, t_stateDimension, 1> F_ext = {0, 0, 0, 0, 0, gravForces};
+
+    //going from the top down for stresses as opposed to bottom up
+    for (int i = number_of_chebyshev_nodes - 1; i >= 0; i--) {
         auto q = t_Q.row(i);
         quaternion = {q[0], q[1], q[2], q[3]};
-
-        Eigen::Matrix<double, t_stateDimension, 1> F_ext = {0, 0, 0, 0, 0, gravForces};
 
         Eigen::Matrix<double, t_stateDimension, 1> b_at_ch_point = Ad(quaternion.toRotationMatrix(), Eigen::Vector3d::Zero())*F_ext;
 
         for (unsigned int j = 0; j < t_stateDimension; ++j) {
-            b(i+j*number_of_chebyshev_nodes, 0) = b_at_ch_point(j);
+            b(number_of_chebyshev_nodes-1-i+j*number_of_chebyshev_nodes, 0) = b_at_ch_point(j);
         }
     }
 
@@ -225,7 +226,6 @@ int main()
     //  Define the initial state
     const Eigen::Vector4d initial_quaternion(1, 0, 0, 0); // Quaternion case
     const auto Q = integrateODE<qStateDimension>(initial_quaternion, q_A, q_b, BOTTOM_TO_TOP, "Q_stack");
-
     //Positions
     constexpr integrationDirection positionDirection = BOTTOM_TO_TOP;
     constexpr unsigned int positionStateDimension = 3;
@@ -236,6 +236,7 @@ int main()
 
     const Eigen::Vector3d initial_position(0, 0, 0); // straight rod
     const auto r = integrateODE<positionStateDimension>(initial_position, position_A, position_b, positionDirection, "r_stack");
+
     //const auto r = integratePositions(initial_position, Q);
 
     //Stresses
