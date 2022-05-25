@@ -215,6 +215,36 @@ void print_matrix(const int &m, const int &n, const cuDoubleComplex *A, const in
     }
 }
 
+template <typename T> void print_vector(const int &m, const T *A);
+
+template <> void print_vector(const int &m, const float *A) {
+    for (int i = 0; i < m; i++) {
+        std::printf("%0.2f ", A[i]);
+    }
+    std::printf("\n");
+}
+
+template <> void print_vector(const int &m, const double *A) {
+    for (int i = 0; i < m; i++) {
+        std::printf("%0.2f ", A[i]);
+    }
+    std::printf("\n");
+}
+
+template <> void print_vector(const int &m, const cuComplex *A) {
+    for (int i = 0; i < m; i++) {
+        std::printf("%0.2f + %0.2fj ", A[i].x, A[i].y);
+    }
+    std::printf("\n");
+}
+
+template <> void print_vector(const int &m, const cuDoubleComplex *A) {
+    for (int i = 0; i < m; i++) {
+        std::printf("%0.2f + %0.2fj ", A[i].x, A[i].y);
+    }
+    std::printf("\n");
+}
+
 
 
 // Returns cudaDataType value as defined in library_types.h for the string containing type name
