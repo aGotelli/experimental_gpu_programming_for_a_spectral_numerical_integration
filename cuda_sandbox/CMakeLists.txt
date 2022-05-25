@@ -98,10 +98,7 @@ target_link_libraries(${PROJECT_NAME}_matrix_inverse
 )
 #set_target_properties(${PROJECT_NAME}_matrix_inverse PROPERTIES CUDA_ARCHITECTURES OFF)
 
-add_executable(${PROJECT_NAME}_spectral_integration
-    src/spectral_integration/spectral_integration.cu
-    include/tictoc.h
-)
+
 add_executable(${PROJECT_NAME}_matrix_copy
 		src/copy/cublas_copy_example.cu
 		include/tictoc.h)
@@ -120,6 +117,14 @@ target_link_libraries(${PROJECT_NAME}_matrix_copy
 )
 
 
+
+
+
+
+add_executable(${PROJECT_NAME}_spectral_integration
+    src/spectral_integration/spectral_integration.cu
+    include/tictoc.h
+)
 target_include_directories(${PROJECT_NAME}_spectral_integration
     PUBLIC
         ${CUDA_INCLUDE_DIRS}
@@ -134,6 +139,8 @@ target_link_libraries(${PROJECT_NAME}_spectral_integration
         cusolverMg
         Eigen3::Eigen
 )
+
+
 
 
 
