@@ -93,7 +93,6 @@ Eigen::MatrixXd getPositionb(Eigen::MatrixXd t_Q) {
             b(i+j*number_of_chebyshev_nodes, 0) = b_at_ch_point(j);
         }
     }
-
     return b;
 }
 
