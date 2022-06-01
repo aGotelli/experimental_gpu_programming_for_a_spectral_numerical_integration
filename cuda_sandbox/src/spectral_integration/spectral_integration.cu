@@ -100,12 +100,7 @@ int main(int argc, char *argv[]) {
     const Eigen::Vector3d initPos(0, 0, 0); //straight rod
     std::shared_ptr<odeBase<rStateDim, num_ch_nodes>> rint_ptr(new rIntegrator<rStateDim, num_ch_nodes>(BOTTOM_TO_TOP));
     initIntegrator<rStateDim>(rint_ptr, qe, Phi_matrix, initPos, Q_stack);
-
-    // rint_ptr->x0 = initPos;
-    // rint_ptr->Q = Q_stack;
-    // rint_ptr->getA();
-    // rint_ptr->getb();
-    // rint_ptr->initMemory();
+    
     const auto r_stack = integrateODE<rStateDim>(rint_ptr);
 
     //STRESSES

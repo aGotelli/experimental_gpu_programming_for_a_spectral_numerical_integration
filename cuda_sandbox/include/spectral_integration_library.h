@@ -3,6 +3,7 @@
 
 #include <Eigen/Dense>
 #include <fstream>
+#include "tictoc.h"
 #include <memory>
 #include "odeBase.h"
 
@@ -10,6 +11,24 @@
 constexpr unsigned int na = 3;  //  Kirkhoff rod
 constexpr unsigned int ne = 3;  // dimesion of qe
 constexpr unsigned int num_ch_nodes = 11;
+
+__global__ void block_copy(double* src, 
+                           const int src_rows,
+                           double* dst, 
+                           const int dst_rows,
+                           const int row_index,
+                           const int col_index) {
+    const unsigned int tid = blockIdx.x*blockDim.x + threadIdx.x;
+    const unsigned int tidx = threadIdx.x;
+    const unsigned int bidx = blockIdx.x;
+    //blocks = columns
+    //threads = rows
+
+    dst[tidx+bidx*dst_rows] = src[row_index+col_index*src_rows+tidx+bidx*src_rows];
+    // cublasDcopy(cublasH, dst_rows,
+    //             src+row_index+col_index*src_rows+tid*src_rows, 1,
+    //             dst+tid*dst_rows, 1);
+}
 
 template <unsigned int t_stateDim>
 const Eigen::MatrixXd solveLinSys(std::shared_ptr<odeBase<t_stateDim, num_ch_nodes>> base) {
@@ -147,31 +166,40 @@ const Eigen::MatrixXd integrateODE(std::shared_ptr<odeBase<t_stateDim, num_ch_no
         base->d_b_NN, 1
     ));
 
-    for (unsigned int i = 0; i < t_stateDim; ++i) {
-        CUBLAS_CHECK(cublasDcopy(
-            base->cublasH, unknownDim,
-            base->d_Dp+t_stateDim+i*probDim, 1,
-            base->d_D_IN+i*unknownDim, 1
-        ));
+    tictoc loop;
+    loop.tic();
+    //#pragma unroll
+    // for (unsigned int i = 0; i < t_stateDim; ++i) {
+    //     CUBLAS_CHECK(cublasDcopy(
+    //         base->cublasH, unknownDim,
+    //         base->d_Dp+t_stateDim+i*probDim, 1,
+    //         base->d_D_IN+i*unknownDim, 1
+    //     ));
 
-    }
+    // }
 
-    for (unsigned int i = 0; i < unknownDim; ++i) {
-        CUBLAS_CHECK(cublasDcopy(
-            base->cublasH, unknownDim,
-            base->d_Dp+t_stateDim+t_stateDim*probDim+i*probDim, 1,
-            base->d_D_NN+i*unknownDim, 1
-        ));
-    }
+    block_copy<<<t_stateDim, unknownDim>>>(base->d_Dp, probDim, base->d_D_IN, unknownDim, t_stateDim, 0);
+    // //#pragma unroll
+    // for (unsigned int i = 0; i < unknownDim; ++i) {
+    //     CUBLAS_CHECK(cublasDcopy(
+    //         base->cublasH, unknownDim,
+    //         base->d_Dp+t_stateDim+t_stateDim*probDim+i*probDim, 1,
+    //         base->d_D_NN+i*unknownDim, 1
+    //     ));
+    // }
+    block_copy<<<unknownDim, unknownDim>>>(base->d_Dp, probDim, base->d_D_NN, unknownDim, t_stateDim, t_stateDim);
 
-    for (unsigned int i = 0; i < unknownDim; ++i) {
-        CUBLAS_CHECK(cublasDcopy(
-            base->cublasH, unknownDim,
-            base->d_A+t_stateDim+t_stateDim*probDim+i*probDim, 1,
-            base->d_A_NN+i*unknownDim, 1
-        ));
-    }
+    //#pragma unroll
+    // for (unsigned int i = 0; i < unknownDim; ++i) {
+    //     CUBLAS_CHECK(cublasDcopy(
+    //         base->cublasH, unknownDim,
+    //         base->d_A+t_stateDim+t_stateDim*probDim+i*probDim, 1,
+    //         base->d_A_NN+i*unknownDim, 1
+    //     ));
+    // }
+    block_copy<<<unknownDim, unknownDim>>>(base->d_A, probDim, base->d_A_NN, unknownDim, t_stateDim, t_stateDim);
 
+    loop.toc("kernel function");
 
     return solveLinSys<t_stateDim>(base);
 }
