@@ -54,6 +54,8 @@ set(CMAKE_CUDA_FLAGS_DEBUG "${CMAKE_CUDA_FLAGS} -O0 -g -lineinfo")
 
 find_package(Eigen3 3.4 REQUIRED NO_MODULE)
 
+find_package(benchmark REQUIRED)
+
 # ##########################################
 # cusolver_examples target
 # ##########################################
@@ -141,6 +143,25 @@ target_link_libraries(${PROJECT_NAME}_spectral_integration
 )
 
 
+add_executable(${PROJECT_NAME}_benchmarck_quaternions
+    src/benchmark/benchmarck_quaternions.cu
+    include/tictoc.h
+)
+target_include_directories(${PROJECT_NAME}_benchmarck_quaternions
+    PUBLIC
+        ${CUDA_INCLUDE_DIRS}
+)
+
+target_link_libraries(${PROJECT_NAME}_benchmarck_quaternions
+    PUBLIC
+        cusolver
+        cublas
+        cublasLt
+        cusparse
+        cusolverMg
+        Eigen3::Eigen
+        benchmark::benchmark
+)
 
 
 
