@@ -60,15 +60,20 @@ void initIntegrator(std::shared_ptr<odeBase<t_stateDim, num_ch_nodes>> base,
                     Eigen::VectorXd x0,
                     Eigen::MatrixXd Q = Eigen::Matrix<double, 4, num_ch_nodes>::Zero(),
                     Eigen::MatrixXd Lambda = Eigen::Matrix<double, 6, num_ch_nodes>::Zero()) {
+    base->initMemory();
+
     base->qe = qe;
     base->Phi_array = phi;
+    base->copy_phi_qe();
+
     base->x0 = x0;
     base->Q = Q;
     base->Lambda = Lambda;
     
-    base->getA();
+    //base->copyDataToDevice();
     base->getb();
-    base->initMemory();
+    base->getA();
+    base->copyDataToDevice();
 }
 
 int main(int argc, char *argv[]) {
@@ -91,45 +96,44 @@ int main(int argc, char *argv[]) {
 
     std::shared_ptr<odeBase<qStateDim, num_ch_nodes>> qint_ptr(new qIntegrator<qStateDim, num_ch_nodes>(BOTTOM_TO_TOP));
     initIntegrator<qStateDim>(qint_ptr, qe, Phi_matrix, initQuaternion);
-
     const auto Q_stack = integrateODE<qStateDim>(qint_ptr);
 
     //POSITIONS
 
-    constexpr unsigned int rStateDim = 3;
-    const Eigen::Vector3d initPos(0, 0, 0); //straight rod
-    std::shared_ptr<odeBase<rStateDim, num_ch_nodes>> rint_ptr(new rIntegrator<rStateDim, num_ch_nodes>(BOTTOM_TO_TOP));
-    initIntegrator<rStateDim>(rint_ptr, qe, Phi_matrix, initPos, Q_stack);
+    // constexpr unsigned int rStateDim = 3;
+    // const Eigen::Vector3d initPos(0, 0, 0); //straight rod
+    // std::shared_ptr<odeBase<rStateDim, num_ch_nodes>> rint_ptr(new rIntegrator<rStateDim, num_ch_nodes>(BOTTOM_TO_TOP));
+    // initIntegrator<rStateDim>(rint_ptr, qe, Phi_matrix, initPos, Q_stack);
     
-    const auto r_stack = integrateODE<rStateDim>(rint_ptr);
+    // const auto r_stack = integrateODE<rStateDim>(rint_ptr);
 
-    //STRESSES
+    // //STRESSES
 
-    constexpr unsigned int lambdaStateDim = 6;
-    const auto initLambda = getInitLambda(Eigen::Quaterniond(Q_stack.row(0)[0],
-                                                             Q_stack.row(0)[1],
-                                                             Q_stack.row(0)[2],
-                                                             Q_stack.row(0)[3]));
-    std::shared_ptr<odeBase<lambdaStateDim, num_ch_nodes>> lambdaint_ptr(new lambdaIntegrator<lambdaStateDim, num_ch_nodes>(TOP_TO_BOTTOM));
-    initIntegrator<lambdaStateDim>(lambdaint_ptr, qe, Phi_matrix, initLambda, Q_stack);
+    // constexpr unsigned int lambdaStateDim = 6;
+    // const auto initLambda = getInitLambda(Eigen::Quaterniond(Q_stack.row(0)[0],
+    //                                                          Q_stack.row(0)[1],
+    //                                                          Q_stack.row(0)[2],
+    //                                                          Q_stack.row(0)[3]));
+    // std::shared_ptr<odeBase<lambdaStateDim, num_ch_nodes>> lambdaint_ptr(new lambdaIntegrator<lambdaStateDim, num_ch_nodes>(TOP_TO_BOTTOM));
+    // initIntegrator<lambdaStateDim>(lambdaint_ptr, qe, Phi_matrix, initLambda, Q_stack);
 
-    const auto lambda_stack = integrateODE<lambdaStateDim>(lambdaint_ptr);
+    // const auto lambda_stack = integrateODE<lambdaStateDim>(lambdaint_ptr);
 
-    //GENERALISED FORCES
+    // //GENERALISED FORCES
 
-    constexpr unsigned int qadStateDim = 9;
-    const auto initQad = Eigen::Vector<double, qadStateDim>::Zero();
-    std::shared_ptr<odeBase<qadStateDim, num_ch_nodes>> qadint_ptr(new qadIntegrator<qadStateDim, num_ch_nodes>(TOP_TO_BOTTOM));
-    initIntegrator<qadStateDim>(qadint_ptr, qe, Phi_matrix, initQad, Q_stack, lambda_stack);
+    // constexpr unsigned int qadStateDim = 9;
+    // const auto initQad = Eigen::Vector<double, qadStateDim>::Zero();
+    // std::shared_ptr<odeBase<qadStateDim, num_ch_nodes>> qadint_ptr(new qadIntegrator<qadStateDim, num_ch_nodes>(TOP_TO_BOTTOM));
+    // initIntegrator<qadStateDim>(qadint_ptr, qe, Phi_matrix, initQad, Q_stack, lambda_stack);
 
-    const auto qad_stack = integrateODE<qadStateDim>(qadint_ptr);
+    // const auto qad_stack = integrateODE<qadStateDim>(qadint_ptr);
 
-    //PRINT RESULTS
+    // //PRINT RESULTS
 
     std::cout << "Q_stack: \n" << Q_stack << "\n" << std::endl;
-    std::cout << "r_stack: \n" << r_stack << "\n" << std::endl;
-    std::cout << "lambda_stack: \n" << lambda_stack << "\n" << std::endl;
-    std::cout << "qad_stack: \n" << qad_stack << "\n" << std::endl;
+    // std::cout << "r_stack: \n" << r_stack << "\n" << std::endl;
+    // std::cout << "lambda_stack: \n" << lambda_stack << "\n" << std::endl;
+    // std::cout << "qad_stack: \n" << qad_stack << "\n" << std::endl;
 
     return 0;
 }

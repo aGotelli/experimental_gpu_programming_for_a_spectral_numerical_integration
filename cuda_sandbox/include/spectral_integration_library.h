@@ -6,11 +6,7 @@
 #include "tictoc.h"
 #include <memory>
 #include "odeBase.h"
-
-
-constexpr unsigned int na = 3;  //  Kirkhoff rod
-constexpr unsigned int ne = 3;  // dimesion of qe
-constexpr unsigned int num_ch_nodes = 11;
+#include "globals.h"
 
 __global__ void block_copy(double* src, 
                            const int src_rows,
@@ -149,6 +145,13 @@ const Eigen::MatrixXd integrateODE(std::shared_ptr<odeBase<t_stateDim, num_ch_no
         base->d_A, probDim
     ));
 
+    Eigen::Matrix<double, probDim, probDim> tmp;
+    CUDA_CHECK(cudaMemcpy(tmp.data(), base->d_A, sizeof(double) * probDim*probDim, cudaMemcpyDeviceToHost));
+
+    auto A_NN_HOST = base->P*base->A;
+    
+    std::cout << "A error: \n" << tmp - A_NN_HOST << std::endl;
+
     CUBLAS_CHECK(cublasDgemm(
         base->cublasH,
         CUBLAS_OP_T, CUBLAS_OP_N,
@@ -198,6 +201,8 @@ const Eigen::MatrixXd integrateODE(std::shared_ptr<odeBase<t_stateDim, num_ch_no
     //     ));
     // }
     block_copy<<<unknownDim, unknownDim>>>(base->d_A, probDim, base->d_A_NN, unknownDim, t_stateDim, t_stateDim);
+
+    
 
     loop.toc("kernel function");
 

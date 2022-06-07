@@ -3,6 +3,21 @@
 
 #include "lie_algebra_utilities.h"
 
+// __global__ void getHat(const double* x, double* X_hat) {
+
+// }
+
+// __global__ void build_ad_xi(const double* K_hat, const double* Gamma_hat, double* ad_xi) {
+//     const unsigned int tid = blockIdx.x*blockDim.x + threadIdx.x;
+//     const unsigned int tidx = threadIdx.x;
+//     const unsigned int bidx = blockIdx.x;
+
+//     ad_xi[tid+(tid/3)*6] = K_hat[tid];
+//     ad_xi[tid+3+(tid/3)*6] = Gamma_hat[tid];
+//     ad_xi[tid+3*6+(tid/3)*6] = 0;
+//     ad_xi[tid+3+3*6+(tid/3)*6] = K_hat[tid];
+// }
+
 template <unsigned int t_stateDim, unsigned int t_numNodes>
 class lambdaIntegrator : public odeBase<t_stateDim, t_numNodes> {
 public:

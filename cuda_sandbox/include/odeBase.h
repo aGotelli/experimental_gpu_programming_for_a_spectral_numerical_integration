@@ -5,6 +5,7 @@
 #include "spectral_integration_utilities.h"
 #include "lie_algebra_utilities.h"
 #include "spectral_integration_library.h"
+#include "globals.h"
 
 template <unsigned int t_stateDim, unsigned int t_numNodes>
 class odeBase {
@@ -35,6 +36,10 @@ public:
     double* d_b = nullptr;
     double* d_Dp = nullptr;
     double* d_P = nullptr;
+    double* d_K = nullptr;
+    double* d_phi_array = nullptr;
+    double* d_qe = nullptr;
+    double* d_AP = nullptr;
 
     int info = 0;
     int *d_info = nullptr; /* error info */
@@ -55,6 +60,14 @@ public:
         D = kroneckerProduct<probDim, probDim>(Eigen::Matrix<double, t_stateDim, t_stateDim>::Identity(), Dn);
         P = getP<t_stateDim, t_numNodes>();
         Dp = P.transpose() * D * P;
+
+        CUDA_CHECK(cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking));
+
+        CUBLAS_CHECK(cublasCreate(&cublasH));
+        CUBLAS_CHECK(cublasSetStream(cublasH, stream));
+
+        CUSOLVER_CHECK(cusolverDnCreate(&cusolverH));
+        CUSOLVER_CHECK(cusolverDnSetStream(cusolverH, stream));
     };
 
     ~odeBase() {
@@ -69,19 +82,14 @@ public:
         CUDA_CHECK(cudaFree(d_b));
         CUDA_CHECK(cudaFree(d_Dp));
         CUDA_CHECK(cudaFree(d_P));
+        CUDA_CHECK(cudaFree(d_K));
+        CUDA_CHECK(cudaFree(d_phi_array));
+        CUDA_CHECK(cudaFree(d_qe));
     }
 
     void initMemory() {
         constexpr unsigned int probDim = t_numNodes*t_stateDim;
         constexpr unsigned int unknownDim = t_stateDim*(t_numNodes-1);
-
-        CUDA_CHECK(cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking));
-
-        CUBLAS_CHECK(cublasCreate(&cublasH));
-        CUBLAS_CHECK(cublasSetStream(cublasH, stream));
-
-        CUSOLVER_CHECK(cusolverDnCreate(&cusolverH));
-        CUSOLVER_CHECK(cusolverDnSetStream(cusolverH, stream));
 
         CUDA_CHECK(cudaMalloc(reinterpret_cast<void **>(&d_b_NN), sizeof(double) * unknownDim));
         CUDA_CHECK(cudaMalloc(reinterpret_cast<void **>(&d_D_IN), sizeof(double) * unknownDim*t_stateDim));
@@ -93,16 +101,36 @@ public:
         CUDA_CHECK(cudaMalloc(reinterpret_cast<void **>(&d_b), sizeof(double) * probDim));
         CUDA_CHECK(cudaMalloc(reinterpret_cast<void **>(&d_Dp), sizeof(double) * probDim*probDim));
         CUDA_CHECK(cudaMalloc(reinterpret_cast<void **>(&d_P), sizeof(double) * probDim*probDim));
+        CUDA_CHECK(cudaMalloc(reinterpret_cast<void**>(&d_K), sizeof(double) * 3*t_numNodes));
+        CUDA_CHECK(cudaMalloc(reinterpret_cast<void**>(&d_phi_array), sizeof(double) * na*na*ne*t_numNodes));
+        CUDA_CHECK(cudaMalloc(reinterpret_cast<void**>(&d_qe), sizeof(double) * na*ne));
+        CUDA_CHECK(cudaMalloc(reinterpret_cast<void**>(&d_AP), sizeof(double) * probDim*probDim));
+    }
 
+    void copyDataToDevice() {
+        constexpr unsigned int probDim = t_numNodes*t_stateDim;
+        constexpr unsigned int unknownDim = t_stateDim*(t_numNodes-1);
         CUDA_CHECK(cudaMemcpyAsync(d_x0, x0.data(), sizeof(double) * t_stateDim, cudaMemcpyHostToDevice, stream));
         CUDA_CHECK(cudaMemcpyAsync(d_info, &info, sizeof(int), cudaMemcpyHostToDevice, stream));
-        CUDA_CHECK(cudaMemcpyAsync(d_A, A.data(), sizeof(double) * probDim*probDim, cudaMemcpyHostToDevice, stream));
+        //CUDA_CHECK(cudaMemcpyAsync(d_A, A.data(), sizeof(double) * probDim*probDim, cudaMemcpyHostToDevice, stream));
         CUDA_CHECK(cudaMemcpyAsync(d_b, b.data(), sizeof(double) * probDim, cudaMemcpyHostToDevice, stream));
         CUDA_CHECK(cudaMemcpyAsync(d_Dp, Dp.data(), sizeof(double) * probDim*probDim, cudaMemcpyHostToDevice, stream));
         CUDA_CHECK(cudaMemcpyAsync(d_P, P.data(), sizeof(double) * probDim*probDim, cudaMemcpyHostToDevice, stream));
 
         CUSOLVER_CHECK(cusolverDnDgetrf_bufferSize(cusolverH, unknownDim, unknownDim, d_A_NN, unknownDim, &lwork));
         CUDA_CHECK(cudaMalloc(reinterpret_cast<void **>(&d_work), sizeof(double) * lwork));
+    }
+
+    void copy_phi_qe() {
+
+        CUDA_CHECK(cudaMemcpyAsync(d_qe, qe.data(), sizeof(double) * na*ne, cudaMemcpyHostToDevice, stream));
+
+        Eigen::Matrix<double, na, na*ne*t_numNodes> phi_matrix;
+        for (unsigned int i = 0; i < t_numNodes; ++i) {
+            phi_matrix.block(0, i*na*ne, na, na*ne) = Phi_array[direction][i];
+        }
+
+        CUDA_CHECK(cudaMemcpyAsync(d_phi_array, phi_matrix.data(), sizeof(double) *na*t_numNodes*na*ne, cudaMemcpyHostToDevice, stream));
     }
 
     virtual void getA(){};
