@@ -54,29 +54,41 @@ Eigen::VectorXd getInitLambda(Eigen::Quaterniond t_q) {
 }
 
 template <unsigned int t_stateDim>
-void initIntegrator(std::shared_ptr<odeBase<t_stateDim, num_ch_nodes>> base,
+void initIntegrator(qIntegrator<t_stateDim, num_ch_nodes>* base,
                     Eigen::VectorXd qe,
-                    std::array<std::array<Eigen::MatrixXd, num_ch_nodes>, 2> phi,
+                    //std::array<std::array<Eigen::MatrixXd, num_ch_nodes>, 2> phi,
                     Eigen::VectorXd x0,
-                    Eigen::MatrixXd Q = Eigen::Matrix<double, 4, num_ch_nodes>::Zero(),
-                    Eigen::MatrixXd Lambda = Eigen::Matrix<double, 6, num_ch_nodes>::Zero()) {
-    base->initMemory();
+                    //Eigen::MatrixXd Q = Eigen::Matrix<double, 4, num_ch_nodes>::Zero(),
+                    //Eigen::MatrixXd Lambda = Eigen::Matrix<double, 6, num_ch_nodes>::Zero()
+                    cublasHandle_t &t_cublasH,
+                    cusolverDnHandle_t &t_cusolverH
+                    ) {
+    //base->initMemory();
 
     base->qe = qe;
-    base->Phi_array = phi;
+    //base->Phi_array = phi;
     base->copy_phi_qe();
 
     base->x0 = x0;
-    base->Q = Q;
-    base->Lambda = Lambda;
+    //base->Q = Q;
+    //base->Lambda = Lambda;
     
     //base->copyDataToDevice();
     base->getb();
-    base->getA();
-    base->copyDataToDevice();
+    base->getA(t_cublasH);
+    base->copyDataToDevice(t_cusolverH);
 }
 
 int main(int argc, char *argv[]) {
+
+    cublasHandle_t cublasH = nullptr;
+    cusolverDnHandle_t cusolverH = nullptr;
+
+    CUBLAS_CHECK(cublasCreate(&cublasH));
+    CUSOLVER_CHECK(cusolverDnCreate(&cusolverH));
+
+
+
     Eigen::VectorXd qe(9);
     //  Here we give some value for the strain
 
@@ -94,46 +106,14 @@ int main(int argc, char *argv[]) {
     constexpr int qStateDim = 4;
     const Eigen::Vector4d initQuaternion(1, 0, 0, 0);
 
-    std::shared_ptr<odeBase<qStateDim, num_ch_nodes>> qint_ptr(new qIntegrator<qStateDim, num_ch_nodes>(BOTTOM_TO_TOP));
-    initIntegrator<qStateDim>(qint_ptr, qe, Phi_matrix, initQuaternion);
-    const auto Q_stack = integrateODE<qStateDim>(qint_ptr);
+    qIntegrator<qStateDim, num_ch_nodes>* qint_ptr = new qIntegrator<qStateDim, num_ch_nodes>(BOTTOM_TO_TOP, Phi_matrix);
+    //initIntegrator<qStateDim>(qint_ptr, qe, Phi_matrix, initQuaternion);
+    initIntegrator<qStateDim>(qint_ptr, qe, initQuaternion, cublasH, cusolverH);
+    const auto Q_stack = integrateODE<qStateDim>(qint_ptr, cublasH, cusolverH);
 
-    //POSITIONS
-
-    // constexpr unsigned int rStateDim = 3;
-    // const Eigen::Vector3d initPos(0, 0, 0); //straight rod
-    // std::shared_ptr<odeBase<rStateDim, num_ch_nodes>> rint_ptr(new rIntegrator<rStateDim, num_ch_nodes>(BOTTOM_TO_TOP));
-    // initIntegrator<rStateDim>(rint_ptr, qe, Phi_matrix, initPos, Q_stack);
-    
-    // const auto r_stack = integrateODE<rStateDim>(rint_ptr);
-
-    // //STRESSES
-
-    // constexpr unsigned int lambdaStateDim = 6;
-    // const auto initLambda = getInitLambda(Eigen::Quaterniond(Q_stack.row(0)[0],
-    //                                                          Q_stack.row(0)[1],
-    //                                                          Q_stack.row(0)[2],
-    //                                                          Q_stack.row(0)[3]));
-    // std::shared_ptr<odeBase<lambdaStateDim, num_ch_nodes>> lambdaint_ptr(new lambdaIntegrator<lambdaStateDim, num_ch_nodes>(TOP_TO_BOTTOM));
-    // initIntegrator<lambdaStateDim>(lambdaint_ptr, qe, Phi_matrix, initLambda, Q_stack);
-
-    // const auto lambda_stack = integrateODE<lambdaStateDim>(lambdaint_ptr);
-
-    // //GENERALISED FORCES
-
-    // constexpr unsigned int qadStateDim = 9;
-    // const auto initQad = Eigen::Vector<double, qadStateDim>::Zero();
-    // std::shared_ptr<odeBase<qadStateDim, num_ch_nodes>> qadint_ptr(new qadIntegrator<qadStateDim, num_ch_nodes>(TOP_TO_BOTTOM));
-    // initIntegrator<qadStateDim>(qadint_ptr, qe, Phi_matrix, initQad, Q_stack, lambda_stack);
-
-    // const auto qad_stack = integrateODE<qadStateDim>(qadint_ptr);
-
-    // //PRINT RESULTS
 
     std::cout << "Q_stack: \n" << Q_stack << "\n" << std::endl;
-    // std::cout << "r_stack: \n" << r_stack << "\n" << std::endl;
-    // std::cout << "lambda_stack: \n" << lambda_stack << "\n" << std::endl;
-    // std::cout << "qad_stack: \n" << qad_stack << "\n" << std::endl;
+
 
     return 0;
 }

@@ -3,7 +3,7 @@
 #include <cublas.h>
 #include <utility>
 
-#include <cusolverDn.h>
+//#include <cusolverDn.h>
 
 #include "cusolver_utils.h"
 
@@ -96,12 +96,12 @@ static void TestNumericalIntegration(benchmark::State& t_state)
     constexpr int qStateDim = 4;
     const Eigen::Vector4d initQuaternion(1, 0, 0, 0);
 
-    std::shared_ptr<odeBase<qStateDim, num_ch_nodes>> qint_ptr(new qIntegrator<qStateDim, num_ch_nodes>(BOTTOM_TO_TOP));
-    initIntegrator<qStateDim>(qint_ptr, qe, Phi_matrix, initQuaternion);
+    //std::shared_ptr<odeBase<qStateDim, num_ch_nodes>> qint_ptr(new qIntegrator<qStateDim, num_ch_nodes>(BOTTOM_TO_TOP));
+    //initIntegrator<qStateDim>(qint_ptr, qe, Phi_matrix, initQuaternion);
     while (t_state.KeepRunning()){
         
 
-        const auto Q_stack = integrateODE<qStateDim>(qint_ptr);
+        //const auto Q_stack = integrateODE<qStateDim>(qint_ptr);
     }
 }
 BENCHMARK(TestNumericalIntegration);

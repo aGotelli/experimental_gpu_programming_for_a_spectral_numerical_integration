@@ -143,25 +143,25 @@ target_link_libraries(${PROJECT_NAME}_spectral_integration
 )
 
 
-add_executable(${PROJECT_NAME}_benchmarck_quaternions
-    src/benchmark/benchmarck_quaternions.cu
-    include/tictoc.h
-)
-target_include_directories(${PROJECT_NAME}_benchmarck_quaternions
-    PUBLIC
-        ${CUDA_INCLUDE_DIRS}
-)
+#add_executable(${PROJECT_NAME}_benchmarck_quaternions
+#    src/benchmark/benchmarck_quaternions.cu
+#    include/tictoc.h
+#)
+#target_include_directories(${PROJECT_NAME}_benchmarck_quaternions
+#    PUBLIC
+#        ${CUDA_INCLUDE_DIRS}
+#)
 
-target_link_libraries(${PROJECT_NAME}_benchmarck_quaternions
-    PUBLIC
-        cusolver
-        cublas
-        cublasLt
-        cusparse
-        cusolverMg
-        Eigen3::Eigen
-        benchmark::benchmark
-)
+#target_link_libraries(${PROJECT_NAME}_benchmarck_quaternions
+#    PUBLIC
+#        cusolver
+#        cublas
+#        cublasLt
+#        cusparse
+#        cusolverMg
+#        Eigen3::Eigen
+#        benchmark::benchmark
+#)
 
 
 

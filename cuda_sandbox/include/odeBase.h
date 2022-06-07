@@ -71,20 +71,20 @@ public:
     };
 
     ~odeBase() {
-        CUDA_CHECK(cudaFree(d_b_NN));
-        CUDA_CHECK(cudaFree(d_D_IN));
-        CUDA_CHECK(cudaFree(d_x0));
-        CUDA_CHECK(cudaFree(d_A_NN));
-        CUDA_CHECK(cudaFree(d_D_NN));
-        CUDA_CHECK(cudaFree(d_info));
-        CUDA_CHECK(cudaFree(d_work));
-        CUDA_CHECK(cudaFree(d_A));
-        CUDA_CHECK(cudaFree(d_b));
-        CUDA_CHECK(cudaFree(d_Dp));
-        CUDA_CHECK(cudaFree(d_P));
-        CUDA_CHECK(cudaFree(d_K));
-        CUDA_CHECK(cudaFree(d_phi_array));
-        CUDA_CHECK(cudaFree(d_qe));
+        cudaFree(d_b_NN);
+        cudaFree(d_D_IN);
+        cudaFree(d_x0);
+        cudaFree(d_A_NN);
+        cudaFree(d_D_NN);
+        cudaFree(d_info);
+        cudaFree(d_work);
+        cudaFree(d_A);
+        cudaFree(d_b);
+        cudaFree(d_Dp);
+        cudaFree(d_P);
+        cudaFree(d_K);
+        cudaFree(d_phi_array);
+        cudaFree(d_qe);
     }
 
     void initMemory() {

@@ -42,44 +42,55 @@ __global__ void copy_K_to_A(double* K, double* A, unsigned int ld) {
     }   
 
 template <unsigned int t_stateDim, unsigned int t_numNodes>
-class qIntegrator : public odeBase<t_stateDim, t_numNodes> {
+class qIntegrator  {
 public:
-    qIntegrator(integrationDirection t_direction) : odeBase<t_stateDim, t_numNodes>(t_direction) {
+    qIntegrator(integrationDirection t_direction, std::array<std::array<Eigen::MatrixXd, num_ch_nodes>, 2> phi)
+    {
         
+        constexpr unsigned int probDim = t_numNodes*t_stateDim;
+        constexpr unsigned int unknownDim = t_stateDim*(t_numNodes-1);
+
+        stateDim = t_stateDim;
+        numNodes = t_numNodes;
+
+        direction = t_direction;
+
+        Dn = getDn<t_numNodes>(direction);
+        D = kroneckerProduct<probDim, probDim>(Eigen::Matrix<double, t_stateDim, t_stateDim>::Identity(), Dn);
+        P = getP<t_stateDim, t_numNodes>();
+        Dp = P.transpose() * D * P;
+
+
+
+
+        CUDA_CHECK(cudaMalloc(reinterpret_cast<void **>(&d_b_NN), sizeof(double) * unknownDim));
+        CUDA_CHECK(cudaMalloc(reinterpret_cast<void **>(&d_D_IN), sizeof(double) * unknownDim*t_stateDim));
+        CUDA_CHECK(cudaMalloc(reinterpret_cast<void **>(&d_x0), sizeof(double) * t_stateDim));
+        CUDA_CHECK(cudaMalloc(reinterpret_cast<void **>(&d_A_NN), sizeof(double) * unknownDim*unknownDim));
+        CUDA_CHECK(cudaMalloc(reinterpret_cast<void **>(&d_D_NN), sizeof(double) * unknownDim*unknownDim));
+        CUDA_CHECK(cudaMalloc(reinterpret_cast<void **>(&d_info), sizeof(int)));
+        CUDA_CHECK(cudaMalloc(reinterpret_cast<void **>(&d_A), sizeof(double) * probDim*probDim));
+        CUDA_CHECK(cudaMalloc(reinterpret_cast<void **>(&d_b), sizeof(double) * probDim));
+        CUDA_CHECK(cudaMalloc(reinterpret_cast<void **>(&d_Dp), sizeof(double) * probDim*probDim));
+        CUDA_CHECK(cudaMalloc(reinterpret_cast<void **>(&d_P), sizeof(double) * probDim*probDim));
+        CUDA_CHECK(cudaMalloc(reinterpret_cast<void **>(&d_K), sizeof(double) * 3*t_numNodes));
+        CUDA_CHECK(cudaMalloc(reinterpret_cast<void **>(&d_phi_array), sizeof(double) * na*na*ne*t_numNodes));
+        CUDA_CHECK(cudaMalloc(reinterpret_cast<void **>(&d_qe), sizeof(double) * na*ne));
+        CUDA_CHECK(cudaMalloc(reinterpret_cast<void **>(&d_AP), sizeof(double) * probDim*probDim));
+
+
+
+        Phi_array = phi;
+    
     };
 
-    void getA() override {
+    void getA(cublasHandle_t &t_cublasH) 
+    {
         constexpr unsigned int probDim = t_stateDim*t_numNodes;
 
-        // std::array<Eigen::Vector3d, t_numNodes> K;
-        // //Eigen::Matrix<double, probDim, probDim> A = Eigen::Matrix<double, probDim, probDim>::Zero();
-        // Eigen::Matrix<double, t_stateDim, t_stateDim> A_at_chebyshev_point;
-
-        // for(unsigned int i=0; i < t_numNodes; i++){
-
-        //     //  Extract the curvature from the strain
-        //     K[i] = this->Phi_array[this->direction][i]*this->qe;
-
-        //     //  Compute the A matrix of Q' = 1/2 A(K) Q
-        //     A_at_chebyshev_point <<      0, -K[i](0),  -K[i](1),  -K[i](2),
-        //                             K[i](0),     0,   K[i](2),  -K[i](1),
-        //                             K[i](1), -K[i](2),      0,   K[i](0),
-        //                             K[i](2),  K[i](1),  -K[i](0),      0;
-
-        //     A_at_chebyshev_point = 0.5*A_at_chebyshev_point;
-
-        //     for (unsigned int row = 0; row < A_at_chebyshev_point.rows(); ++row) {
-        //         for (unsigned int col = 0; col < A_at_chebyshev_point.cols(); ++col) {
-        //             int row_index = row*num_ch_nodes+i;
-        //             int col_index = col*num_ch_nodes+i;
-        //             this->A(row_index, col_index) = A_at_chebyshev_point(row, col);
-        //         }
-        //     }
-
-        // }
         const double alpha = 1;
         const double beta = 0;
-        CUBLAS_CHECK(cublasDgemvStridedBatched(this->cublasH,
+        CUBLAS_CHECK(cublasDgemvStridedBatched(t_cublasH,
                                                 CUBLAS_OP_N,
                                                 na, na*ne,
                                                 &alpha,
@@ -92,49 +103,80 @@ public:
                                                 3,
                                                 t_numNodes));
 
-        // // for (unsigned int i = 0; i < t_numNodes; i++) {
-        // //     CUBLAS_CHECK(cublasDgemv(this->cublasH, CUBLAS_OP_N,
-        // //                              na, na*ne,
-        // //                              &alpha,
-        // //                              this->d_phi_array+i*na*na*ne, na,
-        // //                              this->d_qe, 1,
-        // //                              &beta,
-        // //                              this->d_K+i*3, 1));
-        // // }
 
         copy_K_to_A<<<1, t_numNodes>>>(this->d_K, this->d_A, probDim);
-        // // CUDA_CHECK(
-        // //     cudaMemcpyAsync(this->d_A, A.data(), sizeof(double) * probDim*probDim, cudaMemcpyHostToDevice, this->stream)
-        // // );
 
-        // Eigen::Matrix<double, 3*t_numNodes, 1> k_error;
-        // CUDA_CHECK(
-        //     cudaMemcpyAsync(k_error.data(), this->d_K, sizeof(double) * 3*t_numNodes, cudaMemcpyDeviceToHost, this->stream)
-        // );
-
-        // for (unsigned int i = 0; i < t_numNodes; ++i) {
-        //     std::cout << k_error.block(i*3, 0, 3, 1) - K[i] << "\n" << std::endl;
-        // }
-
-        // Eigen::Matrix<double, probDim, probDim> error;
-        // CUDA_CHECK(
-        //     cudaMemcpyAsync(error.data(), this->d_A, sizeof(double) * probDim*probDim, cudaMemcpyDeviceToHost, this->stream)
-        // );
-
-        // for (unsigned int i = 0; i < this->A.cols(); ++i) {
-        //     std::cout << "Col: " << i << std::endl;
-        //     for (unsigned int j = 0; j < this->A.rows(); ++j) {
-        //         std::cout << "Row " << j << ": " << this->A(i, j) - error(i, j) << std::endl;
-        //     }
-        //     std::cout << "\n\n" << std::endl;
-        // }
-        //std::cout << this->A-error << std::endl;
     }
 
-    void getb() override {
+    void getb() 
+    {
         constexpr unsigned int probDim = t_stateDim*t_numNodes;
-        this->b = Eigen::Vector<double, probDim>::Zero();
+        b = Eigen::Vector<double, probDim>::Zero();
     }
+
+    void copy_phi_qe() {
+
+        CUDA_CHECK(cudaMemcpy(d_qe, qe.data(), sizeof(double) * na*ne, cudaMemcpyHostToDevice));
+        
+        Eigen::Matrix<double, na, na*ne*t_numNodes> phi_matrix;
+        for (unsigned int i = 0; i < t_numNodes; ++i) {
+            phi_matrix.block(0, i*na*ne, na, na*ne) = Phi_array[direction][i];
+        }
+
+        CUDA_CHECK(cudaMemcpy(d_phi_array, phi_matrix.data(), sizeof(double) *na*t_numNodes*na*ne, cudaMemcpyHostToDevice));
+        
+    }
+
+     void copyDataToDevice(cusolverDnHandle_t &t_cusolverH) {
+        constexpr unsigned int probDim = t_numNodes*t_stateDim;
+        constexpr unsigned int unknownDim = t_stateDim*(t_numNodes-1);
+        CUDA_CHECK(cudaMemcpy(d_x0, x0.data(), sizeof(double) * t_stateDim, cudaMemcpyHostToDevice));
+        CUDA_CHECK(cudaMemcpy(d_info, &info, sizeof(int), cudaMemcpyHostToDevice));
+        CUDA_CHECK(cudaMemcpy(d_b, b.data(), sizeof(double) * probDim, cudaMemcpyHostToDevice));
+        CUDA_CHECK(cudaMemcpy(d_Dp, Dp.data(), sizeof(double) * probDim*probDim, cudaMemcpyHostToDevice));
+        CUDA_CHECK(cudaMemcpy(d_P, P.data(), sizeof(double) * probDim*probDim, cudaMemcpyHostToDevice));
+
+        CUSOLVER_CHECK(cusolverDnDgetrf_bufferSize(t_cusolverH, unknownDim, unknownDim, d_A_NN, unknownDim, &lwork));
+        CUDA_CHECK(cudaMalloc(reinterpret_cast<void **>(&d_work), sizeof(double) * lwork));
+    }
+
+public:
+    Eigen::Matrix<double, t_stateDim*t_numNodes, t_stateDim*t_numNodes> A;
+    Eigen::Vector<double, t_stateDim> x0;
+    Eigen::Vector<double, t_stateDim*t_numNodes> b;
+    Eigen::Matrix<double, t_numNodes, t_numNodes> Dn;
+    Eigen::Matrix<double, t_stateDim*t_numNodes, t_stateDim*t_numNodes> D;
+    Eigen::Matrix<double, t_stateDim*t_numNodes, t_stateDim*t_numNodes> P;
+    Eigen::Matrix<double, t_stateDim*t_numNodes, t_stateDim*t_numNodes> Dp;
+    Eigen::VectorXd qe;
+    std::array<std::array<Eigen::MatrixXd, t_numNodes>, 2> Phi_array;
+    integrationDirection direction;
+
+    
+
+    double* d_b_NN = nullptr;
+    double* d_D_IN = nullptr;
+    double* d_x0 = nullptr;
+    double* d_A_NN = nullptr;
+    double* d_D_NN = nullptr;
+    double* d_A = nullptr;
+    double* d_b = nullptr;
+    double* d_Dp = nullptr;
+    double* d_P = nullptr;
+    double* d_K = nullptr;
+    double* d_phi_array = nullptr;
+    double* d_qe = nullptr;
+    double* d_AP = nullptr;
+
+    int info = 0;
+    int *d_info = nullptr; /* error info */
+
+    int lwork = 0;            /* size of workspace */
+    double *d_work = nullptr; /* device workspace for getrf */
+
+private:
+    unsigned int stateDim;
+    unsigned int numNodes;
 };
 
 #endif

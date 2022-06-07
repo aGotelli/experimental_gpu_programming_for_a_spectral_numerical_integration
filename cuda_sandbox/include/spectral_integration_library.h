@@ -6,6 +6,7 @@
 #include "tictoc.h"
 #include <memory>
 #include "odeBase.h"
+#include "qIntegrator.h"
 #include "globals.h"
 
 __global__ void block_copy(double* src, 
@@ -27,7 +28,9 @@ __global__ void block_copy(double* src,
 }
 
 template <unsigned int t_stateDim>
-const Eigen::MatrixXd solveLinSys(std::shared_ptr<odeBase<t_stateDim, num_ch_nodes>> base) {
+const Eigen::MatrixXd solveLinSys(qIntegrator<t_stateDim, num_ch_nodes>* base, 
+                                    cublasHandle_t &t_cublasH,
+                                    cusolverDnHandle_t &t_cusolverH) {
     
     constexpr int probDim = t_stateDim * num_ch_nodes;
     constexpr int unknownDim = t_stateDim * (num_ch_nodes-1);
@@ -35,14 +38,14 @@ const Eigen::MatrixXd solveLinSys(std::shared_ptr<odeBase<t_stateDim, num_ch_nod
     const double beta = 0;
     const double beta_pos = 1;
 
-    CUBLAS_CHECK(cublasDgemv(base->cublasH, CUBLAS_OP_N, 
+    CUBLAS_CHECK(cublasDgemv(t_cublasH, CUBLAS_OP_N, 
                              unknownDim, t_stateDim, 
                              &alpha, 
                              base->d_D_IN, unknownDim, 
                              base->d_x0, 1, 
                              &beta_pos, 
                              base->d_b_NN, 1));
-    CUBLAS_CHECK(cublasDgeam(base->cublasH, 
+    CUBLAS_CHECK(cublasDgeam(t_cublasH, 
                              CUBLAS_OP_N, 
                              CUBLAS_OP_N, 
                              unknownDim, 
@@ -59,10 +62,10 @@ const Eigen::MatrixXd solveLinSys(std::shared_ptr<odeBase<t_stateDim, num_ch_nod
     std::vector<int> Ipiv(unknownDim, 0);
     int *d_Ipiv = nullptr; /* pivoting sequence */
     CUDA_CHECK(cudaMalloc(reinterpret_cast<void **>(&d_Ipiv), sizeof(int) * Ipiv.size()));
-    const int pivot_on = 1;
+    const int pivot_on = 0;
 
     if (pivot_on) {
-        CUSOLVER_CHECK(cusolverDnDgetrf(base->cusolverH, 
+        CUSOLVER_CHECK(cusolverDnDgetrf(t_cusolverH, 
                                         unknownDim, 
                                         unknownDim, 
                                         base->d_A_NN, 
@@ -70,7 +73,7 @@ const Eigen::MatrixXd solveLinSys(std::shared_ptr<odeBase<t_stateDim, num_ch_nod
                                         base->d_work, 
                                         d_Ipiv, 
                                         base->d_info));
-        CUSOLVER_CHECK(cusolverDnDgetrs(base->cusolverH, 
+        CUSOLVER_CHECK(cusolverDnDgetrs(t_cusolverH, 
                                         CUBLAS_OP_N, 
                                         unknownDim, 
                                         1, 
@@ -81,7 +84,7 @@ const Eigen::MatrixXd solveLinSys(std::shared_ptr<odeBase<t_stateDim, num_ch_nod
                                         unknownDim, 
                                         base->d_info));
     } else {
-        CUSOLVER_CHECK(cusolverDnDgetrf(base->cusolverH, 
+        CUSOLVER_CHECK(cusolverDnDgetrf(t_cusolverH, 
                                         unknownDim, 
                                         unknownDim, 
                                         base->d_A_NN, 
@@ -89,7 +92,7 @@ const Eigen::MatrixXd solveLinSys(std::shared_ptr<odeBase<t_stateDim, num_ch_nod
                                         base->d_work, 
                                         NULL, 
                                         base->d_info));
-        CUSOLVER_CHECK(cusolverDnDgetrs(base->cusolverH, 
+        CUSOLVER_CHECK(cusolverDnDgetrs(t_cusolverH, 
                                         CUBLAS_OP_N, 
                                         unknownDim, 
                                         1, 
@@ -105,14 +108,13 @@ const Eigen::MatrixXd solveLinSys(std::shared_ptr<odeBase<t_stateDim, num_ch_nod
     Eigen::Matrix<double, t_stateDim, 1> initState;
 
     CUDA_CHECK( 
-        cudaMemcpyAsync(X_NN.data(), base->d_b_NN, sizeof(double) * unknownDim, cudaMemcpyDeviceToHost, base->stream)
+        cudaMemcpy(X_NN.data(), base->d_b_NN, sizeof(double) * unknownDim, cudaMemcpyDeviceToHost)
     );
 
     CUDA_CHECK(
-        cudaMemcpyAsync(initState.data(), base->d_x0, sizeof(double) * t_stateDim, cudaMemcpyDeviceToHost, base->stream)
+        cudaMemcpy(initState.data(), base->d_x0, sizeof(double) * t_stateDim, cudaMemcpyDeviceToHost)
     );
 
-    CUDA_CHECK(cudaStreamSynchronize(base->stream));
 
     Eigen::Matrix<double, probDim, 1> X_tilde;
     X_tilde << initState, X_NN;
@@ -124,7 +126,9 @@ const Eigen::MatrixXd solveLinSys(std::shared_ptr<odeBase<t_stateDim, num_ch_nod
 }
 
 template <unsigned int t_stateDim>
-const Eigen::MatrixXd integrateODE(std::shared_ptr<odeBase<t_stateDim, num_ch_nodes>> base) {
+const Eigen::MatrixXd integrateODE(qIntegrator<t_stateDim, num_ch_nodes>* base, 
+                                    cublasHandle_t &t_cublasH,
+                                    cusolverDnHandle_t &t_cusolverH) {
 
     constexpr int probDim = t_stateDim * num_ch_nodes;
     constexpr int unknownDim = t_stateDim * (num_ch_nodes-1);
@@ -133,9 +137,9 @@ const Eigen::MatrixXd integrateODE(std::shared_ptr<odeBase<t_stateDim, num_ch_no
     const double beta = 0;
     const double beta_pos = 1;
     
-    CUBLAS_CHECK(cublasDgemv(base->cublasH, CUBLAS_OP_N, probDim, probDim, &alpha, base->d_P, probDim, base->d_b, 1, &beta, base->d_b, 1));
+    CUBLAS_CHECK(cublasDgemv(t_cublasH, CUBLAS_OP_N, probDim, probDim, &alpha, base->d_P, probDim, base->d_b, 1, &beta, base->d_b, 1));
     CUBLAS_CHECK(cublasDgemm(
-        base->cublasH,
+        t_cublasH,
         CUBLAS_OP_N, CUBLAS_OP_N,
         probDim, probDim, probDim,
         &alpha,
@@ -145,15 +149,9 @@ const Eigen::MatrixXd integrateODE(std::shared_ptr<odeBase<t_stateDim, num_ch_no
         base->d_A, probDim
     ));
 
-    Eigen::Matrix<double, probDim, probDim> tmp;
-    CUDA_CHECK(cudaMemcpy(tmp.data(), base->d_A, sizeof(double) * probDim*probDim, cudaMemcpyDeviceToHost));
-
-    auto A_NN_HOST = base->P*base->A;
-    
-    std::cout << "A error: \n" << tmp - A_NN_HOST << std::endl;
 
     CUBLAS_CHECK(cublasDgemm(
-        base->cublasH,
+        t_cublasH,
         CUBLAS_OP_T, CUBLAS_OP_N,
         probDim, probDim, probDim,
         &alpha,
@@ -164,49 +162,24 @@ const Eigen::MatrixXd integrateODE(std::shared_ptr<odeBase<t_stateDim, num_ch_no
     ));
 
     CUBLAS_CHECK(cublasDcopy(
-        base->cublasH, unknownDim,
+        t_cublasH, unknownDim,
         base->d_b+t_stateDim, 1,
         base->d_b_NN, 1
     ));
 
-    tictoc loop;
-    loop.tic();
-    //#pragma unroll
-    // for (unsigned int i = 0; i < t_stateDim; ++i) {
-    //     CUBLAS_CHECK(cublasDcopy(
-    //         base->cublasH, unknownDim,
-    //         base->d_Dp+t_stateDim+i*probDim, 1,
-    //         base->d_D_IN+i*unknownDim, 1
-    //     ));
 
-    // }
 
     block_copy<<<t_stateDim, unknownDim>>>(base->d_Dp, probDim, base->d_D_IN, unknownDim, t_stateDim, 0);
-    // //#pragma unroll
-    // for (unsigned int i = 0; i < unknownDim; ++i) {
-    //     CUBLAS_CHECK(cublasDcopy(
-    //         base->cublasH, unknownDim,
-    //         base->d_Dp+t_stateDim+t_stateDim*probDim+i*probDim, 1,
-    //         base->d_D_NN+i*unknownDim, 1
-    //     ));
-    // }
+
     block_copy<<<unknownDim, unknownDim>>>(base->d_Dp, probDim, base->d_D_NN, unknownDim, t_stateDim, t_stateDim);
 
-    //#pragma unroll
-    // for (unsigned int i = 0; i < unknownDim; ++i) {
-    //     CUBLAS_CHECK(cublasDcopy(
-    //         base->cublasH, unknownDim,
-    //         base->d_A+t_stateDim+t_stateDim*probDim+i*probDim, 1,
-    //         base->d_A_NN+i*unknownDim, 1
-    //     ));
-    // }
+
     block_copy<<<unknownDim, unknownDim>>>(base->d_A, probDim, base->d_A_NN, unknownDim, t_stateDim, t_stateDim);
 
-    
+   
 
-    loop.toc("kernel function");
+    return solveLinSys<t_stateDim>(base, t_cublasH, t_cusolverH);
 
-    return solveLinSys<t_stateDim>(base);
 }
 
 #endif
