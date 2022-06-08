@@ -44,14 +44,13 @@ __global__ void copy_K_to_A(double* K, double* A, unsigned int ld) {
 template <unsigned int t_stateDim, unsigned int t_numNodes>
 class qIntegrator  {
 public:
-    qIntegrator(integrationDirection t_direction, std::array<std::array<Eigen::MatrixXd, num_ch_nodes>, 2> phi)
+    qIntegrator(integrationDirection t_direction, std::array<std::array<Eigen::MatrixXd, num_ch_nodes>, 2> phi, cusolverDnHandle_t &t_cusolverH) : stateDim(t_stateDim) , numNodes(t_numNodes)
     {
-        
+        tictoc tictoc;
+        tictoc.tic();
         constexpr unsigned int probDim = t_numNodes*t_stateDim;
         constexpr unsigned int unknownDim = t_stateDim*(t_numNodes-1);
 
-        stateDim = t_stateDim;
-        numNodes = t_numNodes;
 
         direction = t_direction;
 
@@ -81,6 +80,14 @@ public:
 
 
         Phi_array = phi;
+
+        CUDA_CHECK(cudaMemcpy(d_info, &info, sizeof(int), cudaMemcpyHostToDevice));
+        CUDA_CHECK(cudaMemcpy(d_Dp, Dp.data(), sizeof(double) * probDim*probDim, cudaMemcpyHostToDevice));
+        CUDA_CHECK(cudaMemcpy(d_P, P.data(), sizeof(double) * probDim*probDim, cudaMemcpyHostToDevice));
+        CUSOLVER_CHECK(cusolverDnDgetrf_bufferSize(t_cusolverH, unknownDim, unknownDim, d_A_NN, unknownDim, &lwork));
+        CUDA_CHECK(cudaMalloc(reinterpret_cast<void **>(&d_work), sizeof(double) * lwork));
+
+        tictoc.toc("finish initialization constant members");
     
     };
 
@@ -130,14 +137,9 @@ public:
      void copyDataToDevice(cusolverDnHandle_t &t_cusolverH) {
         constexpr unsigned int probDim = t_numNodes*t_stateDim;
         constexpr unsigned int unknownDim = t_stateDim*(t_numNodes-1);
-        CUDA_CHECK(cudaMemcpy(d_x0, x0.data(), sizeof(double) * t_stateDim, cudaMemcpyHostToDevice));
-        CUDA_CHECK(cudaMemcpy(d_info, &info, sizeof(int), cudaMemcpyHostToDevice));
+        CUDA_CHECK(cudaMemcpy(d_x0, x0.data(), sizeof(double) * t_stateDim, cudaMemcpyHostToDevice)); //?
         CUDA_CHECK(cudaMemcpy(d_b, b.data(), sizeof(double) * probDim, cudaMemcpyHostToDevice));
-        CUDA_CHECK(cudaMemcpy(d_Dp, Dp.data(), sizeof(double) * probDim*probDim, cudaMemcpyHostToDevice));
-        CUDA_CHECK(cudaMemcpy(d_P, P.data(), sizeof(double) * probDim*probDim, cudaMemcpyHostToDevice));
-
-        CUSOLVER_CHECK(cusolverDnDgetrf_bufferSize(t_cusolverH, unknownDim, unknownDim, d_A_NN, unknownDim, &lwork));
-        CUDA_CHECK(cudaMalloc(reinterpret_cast<void **>(&d_work), sizeof(double) * lwork));
+        
     }
 
 public:
@@ -175,8 +177,8 @@ public:
     double *d_work = nullptr; /* device workspace for getrf */
 
 private:
-    unsigned int stateDim;
-    unsigned int numNodes;
+    const unsigned int stateDim;
+    const unsigned int numNodes;
 };
 
 #endif

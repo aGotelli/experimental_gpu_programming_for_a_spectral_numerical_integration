@@ -62,7 +62,8 @@ void initIntegrator(qIntegrator<t_stateDim, num_ch_nodes>* base,
                     //Eigen::MatrixXd Lambda = Eigen::Matrix<double, 6, num_ch_nodes>::Zero()
                     cublasHandle_t &t_cublasH,
                     cusolverDnHandle_t &t_cusolverH
-                    ) {
+                    ) 
+    {
     //base->initMemory();
 
     base->qe = qe;
@@ -106,8 +107,7 @@ int main(int argc, char *argv[]) {
     constexpr int qStateDim = 4;
     const Eigen::Vector4d initQuaternion(1, 0, 0, 0);
 
-    qIntegrator<qStateDim, num_ch_nodes>* qint_ptr = new qIntegrator<qStateDim, num_ch_nodes>(BOTTOM_TO_TOP, Phi_matrix);
-    //initIntegrator<qStateDim>(qint_ptr, qe, Phi_matrix, initQuaternion);
+    qIntegrator<qStateDim, num_ch_nodes>* qint_ptr = new qIntegrator<qStateDim, num_ch_nodes>(BOTTOM_TO_TOP, Phi_matrix, cusolverH);
     initIntegrator<qStateDim>(qint_ptr, qe, initQuaternion, cublasH, cusolverH);
     const auto Q_stack = integrateODE<qStateDim>(qint_ptr, cublasH, cusolverH);
 
