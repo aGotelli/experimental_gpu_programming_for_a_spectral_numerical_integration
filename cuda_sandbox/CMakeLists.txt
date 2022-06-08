@@ -140,6 +140,7 @@ target_link_libraries(${PROJECT_NAME}_spectral_integration
         cusparse
         cusolverMg
         Eigen3::Eigen
+        benchmark::benchmark
 )
 
 

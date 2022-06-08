@@ -36,6 +36,8 @@
 #include "lambdaIntegrator.h"
 #include "qadIntegrator.h"
 
+#include <benchmark/benchmark.h>
+
 
 const auto chebyshev_points_top_down = ComputeChebyshevPoints<num_ch_nodes>(TOP_TO_BOTTOM);
 const auto chebyshev_points_bottom_up = ComputeChebyshevPoints<num_ch_nodes>(BOTTOM_TO_TOP);
@@ -79,6 +81,50 @@ void initIntegrator(qIntegrator<t_stateDim, num_ch_nodes>* base,
     base->getA(t_cublasH);
     base->copyDataToDevice(t_cusolverH);
 }
+/*
+static void TestNumericalIntegration(benchmark::State& t_state)
+{
+   cublasHandle_t cublasH = nullptr;
+    cusolverDnHandle_t cusolverH = nullptr;
+
+    CUBLAS_CHECK(cublasCreate(&cublasH));
+    CUSOLVER_CHECK(cusolverDnCreate(&cusolverH));
+
+
+
+    Eigen::VectorXd qe(9);
+    //  Here we give some value for the strain
+
+    qe <<   0,
+            0,
+            0,
+            1.28776905384098,
+           -1.63807577049031,
+            0.437404540900837,
+            0,
+            0,
+            0;
+
+    //Quaternions
+    constexpr int qStateDim = 4;
+    const Eigen::Vector4d initQuaternion(1, 0, 0, 0);
+
+    qIntegrator<qStateDim, num_ch_nodes>* qint_ptr = new qIntegrator<qStateDim, num_ch_nodes>(BOTTOM_TO_TOP, Phi_matrix, cusolverH);
+
+    while (t_state.KeepRunning()){
+        initIntegrator<qStateDim>(qint_ptr, qe, initQuaternion, cublasH, cusolverH);
+        const auto Q_stack = integrateODE<qStateDim>(qint_ptr, cublasH, cusolverH);
+    }
+}
+BENCHMARK(TestNumericalIntegration);
+
+
+
+
+BENCHMARK_MAIN();
+*/
+
+
 
 int main(int argc, char *argv[]) {
 
@@ -117,3 +163,4 @@ int main(int argc, char *argv[]) {
 
     return 0;
 }
+
