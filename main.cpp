@@ -186,11 +186,18 @@ Eigen::MatrixXd GetQuaternions(const Eigen::Vector4d &t_initial_state, const Eig
         const MatrixNpNs A_IT = Ap.block<prob_dimension, state_dimension>(0, 0);
         const VectorNp b_IT = ( D_IT - A_IT ) * t_initial_state;
 
+        std::cout << "D_IT : \n " << D_IT << std::endl;
+        std::cout << std::endl << std::endl << std::endl << std::endl;
+
 
         //  Obtain the section related to the unknows of the problem
         const MatrixNuNu D_NN = Dp.block<unknow_state_dimension, unknow_state_dimension>(state_dimension, state_dimension);
         const MatrixNuNu A_NN = Ap.block<unknow_state_dimension, unknow_state_dimension>(state_dimension, state_dimension);
         const VectorNu ivp = b_IT.block<unknow_state_dimension, 1>(state_dimension, 0);
+        std::cout << "ivp : \n " << ivp << std::endl;
+        std::cout << std::endl << std::endl << std::endl << std::endl;
+
+
         const VectorNu b_NN   = bp.block<unknow_state_dimension, 1>(state_dimension, 0);
 
         //  Finally compute the states at the unknows Chebyshev points
