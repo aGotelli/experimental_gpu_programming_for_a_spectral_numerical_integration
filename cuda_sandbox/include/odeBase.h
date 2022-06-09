@@ -40,6 +40,7 @@ public:
     double* d_phi_array = nullptr;
     double* d_qe = nullptr;
     double* d_AP = nullptr;
+    double* d_Ipiv = nullptr;
 
     int info = 0;
     int *d_info = nullptr; /* error info */
@@ -85,6 +86,7 @@ public:
         cudaFree(d_K);
         cudaFree(d_phi_array);
         cudaFree(d_qe);
+        cudaFree(d_Ipiv);
     }
 
     void initMemory() {

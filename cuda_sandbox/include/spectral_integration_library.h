@@ -9,26 +9,8 @@
 #include "qIntegrator.h"
 #include "globals.h"
 
-__global__ void block_copy(double* src, 
-                           const int src_rows,
-                           double* dst, 
-                           const int dst_rows,
-                           const int row_index,
-                           const int col_index) {
-    const unsigned int tid = blockIdx.x*blockDim.x + threadIdx.x;
-    const unsigned int tidx = threadIdx.x;
-    const unsigned int bidx = blockIdx.x;
-    //blocks = columns
-    //threads = rows
-
-    dst[tidx+bidx*dst_rows] = src[row_index+col_index*src_rows+tidx+bidx*src_rows];
-    // cublasDcopy(cublasH, dst_rows,
-    //             src+row_index+col_index*src_rows+tid*src_rows, 1,
-    //             dst+tid*dst_rows, 1);
-}
-
 template <unsigned int t_stateDim>
-const Eigen::MatrixXd solveLinSys(qIntegrator<t_stateDim, num_ch_nodes>* base, 
+const double* solveLinSys(qIntegrator<t_stateDim, num_ch_nodes>* base, 
                                     cublasHandle_t &t_cublasH,
                                     cusolverDnHandle_t &t_cusolverH) {
     
@@ -43,7 +25,7 @@ const Eigen::MatrixXd solveLinSys(qIntegrator<t_stateDim, num_ch_nodes>* base,
                              &alpha, 
                              base->d_D_IN, unknownDim, 
                              base->d_x0, 1, 
-                             &beta_pos, 
+                             &beta, 
                              base->d_b_NN, 1));
     CUBLAS_CHECK(cublasDgeam(t_cublasH, 
                              CUBLAS_OP_N, 
@@ -59,9 +41,6 @@ const Eigen::MatrixXd solveLinSys(qIntegrator<t_stateDim, num_ch_nodes>* base,
                              base->d_A_NN,
                              unknownDim));
 
-    std::vector<int> Ipiv(unknownDim, 0);
-    int *d_Ipiv = nullptr; /* pivoting sequence */
-    CUDA_CHECK(cudaMalloc(reinterpret_cast<void **>(&d_Ipiv), sizeof(int) * Ipiv.size()));
     const int pivot_on = 0;
 
     if (pivot_on) {
@@ -71,7 +50,7 @@ const Eigen::MatrixXd solveLinSys(qIntegrator<t_stateDim, num_ch_nodes>* base,
                                         base->d_A_NN, 
                                         unknownDim, 
                                         base->d_work, 
-                                        d_Ipiv, 
+                                        base->d_Ipiv, 
                                         base->d_info));
         CUSOLVER_CHECK(cusolverDnDgetrs(t_cusolverH, 
                                         CUBLAS_OP_N, 
@@ -79,7 +58,7 @@ const Eigen::MatrixXd solveLinSys(qIntegrator<t_stateDim, num_ch_nodes>* base,
                                         1, 
                                         base->d_A_NN, 
                                         unknownDim, 
-                                        d_Ipiv, 
+                                        base->d_Ipiv, 
                                         base->d_b_NN, 
                                         unknownDim, 
                                         base->d_info));
@@ -104,29 +83,11 @@ const Eigen::MatrixXd solveLinSys(qIntegrator<t_stateDim, num_ch_nodes>* base,
                                         base->d_info));
     }
 
-    Eigen::Matrix<double, unknownDim, 1> X_NN;
-    Eigen::Matrix<double, t_stateDim, 1> initState;
-
-    CUDA_CHECK( 
-        cudaMemcpy(X_NN.data(), base->d_b_NN, sizeof(double) * unknownDim, cudaMemcpyDeviceToHost)
-    );
-
-    CUDA_CHECK(
-        cudaMemcpy(initState.data(), base->d_x0, sizeof(double) * t_stateDim, cudaMemcpyDeviceToHost)
-    );
-
-
-    Eigen::Matrix<double, probDim, 1> X_tilde;
-    X_tilde << initState, X_NN;
-    X_tilde = base->P*X_tilde;
-    Eigen::Matrix<double, num_ch_nodes, t_stateDim> X_stack = Eigen::Map<Eigen::Matrix<double, num_ch_nodes, t_stateDim  >>(X_tilde.data());
-
-    CUDA_CHECK(cudaFree(d_Ipiv));
-    return X_stack;
+    return base->d_b_NN;
 }
 
 template <unsigned int t_stateDim>
-const Eigen::MatrixXd integrateODE(qIntegrator<t_stateDim, num_ch_nodes>* base, 
+const double* integrateODE(qIntegrator<t_stateDim, num_ch_nodes>* base, 
                                     cublasHandle_t &t_cublasH,
                                     cusolverDnHandle_t &t_cusolverH) {
 
@@ -167,17 +128,15 @@ const Eigen::MatrixXd integrateODE(qIntegrator<t_stateDim, num_ch_nodes>* base,
         base->d_b_NN, 1
     ));
 
-
-
-    block_copy<<<t_stateDim, unknownDim>>>(base->d_Dp, probDim, base->d_D_IN, unknownDim, t_stateDim, 0);
-
-    block_copy<<<unknownDim, unknownDim>>>(base->d_Dp, probDim, base->d_D_NN, unknownDim, t_stateDim, t_stateDim);
-
-
     block_copy<<<unknownDim, unknownDim>>>(base->d_A, probDim, base->d_A_NN, unknownDim, t_stateDim, t_stateDim);
-
+    // for (unsigned int i = 0; i < unknownDim; ++i) {
+    //     CUBLAS_CHECK(cublasDcopy(
+    //         t_cublasH, unknownDim,
+    //         base->d_A+t_stateDim+t_stateDim*probDim+i*probDim, 1,
+    //         base->d_A_NN+i*unknownDim, 1
+    //     ));
+    // }
    
-
     return solveLinSys<t_stateDim>(base, t_cublasH, t_cusolverH);
 
 }

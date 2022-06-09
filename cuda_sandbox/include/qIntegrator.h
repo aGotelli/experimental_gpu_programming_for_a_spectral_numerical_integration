@@ -35,24 +35,29 @@ __global__ void copy_K_to_A(const double* K, double* A, unsigned int ld) {
 
         unsigned int curr_a = tid+tid*ld;
         
-        A[curr_a] = 0;
         A[curr_a+num_ch_nodes] = 0.5*K[3*tid+0];
         A[curr_a+2*num_ch_nodes] = 0.5*K[3*tid+1];
         A[curr_a+3*num_ch_nodes] = 0.5*K[3*tid+2];
 
-        A[curr_a+num_ch_nodes*ld] = -0.5*K[3*tid+0];
-        A[curr_a+num_ch_nodes*ld+num_ch_nodes] = 0;
-        A[curr_a+num_ch_nodes*ld+2*num_ch_nodes] = -0.5*K[3*tid+2];
         A[curr_a+num_ch_nodes*ld+3*num_ch_nodes] = 0.5*K[3*tid+1];
+        A[curr_a+num_ch_nodes*ld+2*num_ch_nodes] = -0.5*K[3*tid+2];
 
-        A[curr_a+2*num_ch_nodes*ld] = -0.5*K[3*tid+1];
-        A[curr_a+2*num_ch_nodes*ld+num_ch_nodes] = 0.5*K[3*tid+2];
-        A[curr_a+2*num_ch_nodes*ld+2*num_ch_nodes] = 0;
         A[curr_a+2*num_ch_nodes*ld+3*num_ch_nodes] = -0.5*K[3*tid+0];
 
+
+        A[curr_a+num_ch_nodes*ld] = -0.5*K[3*tid+0];
+        A[curr_a+2*num_ch_nodes*ld] = -0.5*K[3*tid+1];
         A[curr_a+3*num_ch_nodes*ld] = -0.5*K[3*tid+2];
+
         A[curr_a+3*num_ch_nodes*ld+num_ch_nodes] = -0.5*K[3*tid+1];
+        A[curr_a+2*num_ch_nodes*ld+num_ch_nodes] = 0.5*K[3*tid+2];
+
         A[curr_a+3*num_ch_nodes*ld+2*num_ch_nodes] = 0.5*K[3*tid+0];
+
+
+        A[curr_a] = 0;
+        A[curr_a+num_ch_nodes*ld+num_ch_nodes] = 0;
+        A[curr_a+2*num_ch_nodes*ld+2*num_ch_nodes] = 0;
         A[curr_a+3*num_ch_nodes*ld+3*num_ch_nodes] = 0;
     }   
 
@@ -76,6 +81,8 @@ public:
         P = getP<t_stateDim, t_numNodes>();
         Dp = P.transpose() * D * P;
 
+        Ipiv = std::vector<int>(unknownDim, 0);
+
         CUDA_CHECK(cudaMalloc(reinterpret_cast<void **>(&d_b_NN), sizeof(double) * unknownDim));
         CUDA_CHECK(cudaMalloc(reinterpret_cast<void **>(&d_D_IN), sizeof(double) * unknownDim*t_stateDim));
         CUDA_CHECK(cudaMalloc(reinterpret_cast<void **>(&d_x0), sizeof(double) * t_stateDim));
@@ -90,6 +97,7 @@ public:
         CUDA_CHECK(cudaMalloc(reinterpret_cast<void **>(&d_phi), sizeof(double) * ne*t_numNodes));
         CUDA_CHECK(cudaMalloc(reinterpret_cast<void **>(&d_qe), sizeof(double) * na*ne));
         CUDA_CHECK(cudaMalloc(reinterpret_cast<void **>(&d_AP), sizeof(double) * probDim*probDim));
+        CUDA_CHECK(cudaMalloc(reinterpret_cast<void **>(&d_Ipiv), sizeof(int) * unknownDim));
 
         CUDA_CHECK(cudaMemcpy(d_info, &info, sizeof(int), cudaMemcpyHostToDevice));
         CUDA_CHECK(cudaMemcpy(d_Dp, Dp.data(), sizeof(double) * probDim*probDim, cudaMemcpyHostToDevice));
@@ -98,6 +106,24 @@ public:
         CUDA_CHECK(cudaMalloc(reinterpret_cast<void **>(&d_work), sizeof(double) * lwork));
         CUDA_CHECK(cudaMemcpy(d_phi, phi.data(), sizeof(double) *t_numNodes*ne, cudaMemcpyHostToDevice));
         CUDA_CHECK(cudaMemcpy(d_x0, x0.data(), sizeof(double) * t_stateDim, cudaMemcpyHostToDevice));
+
+        block_copy<<<t_stateDim, unknownDim>>>(d_Dp, probDim, d_D_IN, unknownDim, t_stateDim, 0);
+        // for (unsigned int i = 0; i < t_stateDim; ++i) {
+        //     CUBLAS_CHECK(cublasDcopy(
+        //         t_cublasH, unknownDim,
+        //         base->d_Dp+t_stateDim+i*probDim, 1,
+        //         base->d_D_IN+i*unknownDim, 1
+        //     ));
+        // }
+
+        block_copy<<<unknownDim, unknownDim>>>(d_Dp, probDim, d_D_NN, unknownDim, t_stateDim, t_stateDim);
+        // for (unsigned int i = 0; i < unknownDim; ++i) {
+        //     CUBLAS_CHECK(cublasDcopy(
+        //         t_cublasH, unknownDim,
+        //         base->d_Dp+t_stateDim+t_stateDim*probDim+i*probDim, 1,
+        //         base->d_D_NN+i*unknownDim, 1
+        //     ));
+        // }
 
         getb();
 
@@ -142,7 +168,6 @@ public:
         CUDA_CHECK(cudaMemcpy(d_qe, qe.data(), sizeof(double) * na*ne, cudaMemcpyHostToDevice));
     }
 
-public:
     std::vector<double> x0;
     Eigen::Matrix<double, t_numNodes, t_numNodes> Dn;
     Eigen::Matrix<double, t_stateDim*t_numNodes, t_stateDim*t_numNodes> D;
@@ -151,8 +176,7 @@ public:
     std::vector<double> qe;
     std::array<double, t_numNodes*ne> phi;
     integrationDirection direction;
-
-    
+    std::vector<int> Ipiv;
 
     double* d_b_NN = nullptr;
     double* d_D_IN = nullptr;
@@ -167,6 +191,7 @@ public:
     double* d_phi = nullptr;
     double* d_qe = nullptr;
     double* d_AP = nullptr;
+    int *d_Ipiv = nullptr; /* pivoting sequence */
 
     int info = 0;
     int *d_info = nullptr; /* error info */
