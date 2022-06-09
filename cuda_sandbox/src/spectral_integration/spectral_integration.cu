@@ -81,7 +81,7 @@ void initIntegrator(qIntegrator<t_stateDim, num_ch_nodes>* base,
     base->getA(t_cublasH);
     base->copyDataToDevice(t_cusolverH);
 }
-/*
+
 static void TestNumericalIntegration(benchmark::State& t_state)
 {
    cublasHandle_t cublasH = nullptr;
@@ -122,7 +122,7 @@ BENCHMARK(TestNumericalIntegration);
 
 
 BENCHMARK_MAIN();
-*/
+/*
 
 
 
@@ -154,6 +154,17 @@ int main(int argc, char *argv[]) {
     const Eigen::Vector4d initQuaternion(1, 0, 0, 0);
 
     qIntegrator<qStateDim, num_ch_nodes>* qint_ptr = new qIntegrator<qStateDim, num_ch_nodes>(BOTTOM_TO_TOP, Phi_matrix, cusolverH);
+
+    //  Compute Phi as std::array (bye bye Eigen)
+
+    //  Compute K in parallel (memory already allocated)
+
+    //  Construct A in parallel (kernels) as a memeber function
+
+    //  Move copies in the constructor
+
+    //  Solve the system
+
     initIntegrator<qStateDim>(qint_ptr, qe, initQuaternion, cublasH, cusolverH);
     const auto Q_stack = integrateODE<qStateDim>(qint_ptr, cublasH, cusolverH);
 
@@ -163,4 +174,4 @@ int main(int argc, char *argv[]) {
 
     return 0;
 }
-
+*/
