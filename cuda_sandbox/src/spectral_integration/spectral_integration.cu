@@ -45,7 +45,7 @@ const std::array<std::array<double, num_ch_nodes>, 2> chebyshev_points = {chebys
 
 const auto Phi_top_down = Phi<na, ne, num_ch_nodes>(chebyshev_points[TOP_TO_BOTTOM]);
 const auto Phi_bottom_up = Phi<na, ne, num_ch_nodes>(chebyshev_points[BOTTOM_TO_TOP]);
-const std::array<std::array<Eigen::MatrixXd, num_ch_nodes>, 2> Phi_matrix = {Phi_bottom_up, Phi_top_down};
+//const std::array<std::array<Eigen::MatrixXd, num_ch_nodes>, 2> Phi_matrix = {Phi_bottom_up, Phi_top_down};
 
 Eigen::VectorXd getInitLambda(Eigen::Quaterniond t_q) {
     const Eigen::Matrix<double, 6, 6> Ad_at_tip = Ad(t_q.toRotationMatrix(), Eigen::Vector3d::Zero());
@@ -57,72 +57,64 @@ Eigen::VectorXd getInitLambda(Eigen::Quaterniond t_q) {
 
 template <unsigned int t_stateDim>
 void initIntegrator(qIntegrator<t_stateDim, num_ch_nodes>* base,
-                    Eigen::VectorXd qe,
-                    //std::array<std::array<Eigen::MatrixXd, num_ch_nodes>, 2> phi,
-                    Eigen::VectorXd x0,
-                    //Eigen::MatrixXd Q = Eigen::Matrix<double, 4, num_ch_nodes>::Zero(),
-                    //Eigen::MatrixXd Lambda = Eigen::Matrix<double, 6, num_ch_nodes>::Zero()
-                    cublasHandle_t &t_cublasH,
-                    cusolverDnHandle_t &t_cusolverH
-                    ) 
-    {
-    //base->initMemory();
-
+                    std::vector<double> qe,
+                    cublasHandle_t &t_cublasH)  {
     base->qe = qe;
-    //base->Phi_array = phi;
-    base->copy_phi_qe();
-
-    base->x0 = x0;
-    //base->Q = Q;
-    //base->Lambda = Lambda;
-    
-    //base->copyDataToDevice();
-    base->getb();
-    base->getA(t_cublasH);
-    base->copyDataToDevice(t_cusolverH);
+    base->copy_qe();
+    //base->getb();
+    base->getK(base->d_phi, base->d_qe, base->d_K);
+    base->getA(base->d_K);
 }
 
-static void TestNumericalIntegration(benchmark::State& t_state)
-{
-   cublasHandle_t cublasH = nullptr;
-    cusolverDnHandle_t cusolverH = nullptr;
+// static void TestNumericalIntegration(benchmark::State& t_state)
+// {
+//     cublasHandle_t cublasH = nullptr;
+//     cusolverDnHandle_t cusolverH = nullptr;
 
-    CUBLAS_CHECK(cublasCreate(&cublasH));
-    CUSOLVER_CHECK(cusolverDnCreate(&cusolverH));
+//     CUBLAS_CHECK(cublasCreate(&cublasH));
+//     CUSOLVER_CHECK(cusolverDnCreate(&cusolverH));
+
+//     //  Here we give some value for the strain
+//     std::vector<double> qe {
+//         0,
+//         0,
+//         0,
+//         1.28776905384098,
+//         -1.63807577049031,
+//         0.437404540900837,
+//         0,
+//         0,
+//         0
+//     };
+
+//     //Quaternions
+//     constexpr int qStateDim = 4;
+//     //const Eigen::Vector4d initQuaternion(1, 0, 0, 0);
+//     std::vector<double> initQuaternion{1, 0, 0, 0};
+
+//     qIntegrator<qStateDim, num_ch_nodes>* qint_ptr = new qIntegrator<qStateDim, num_ch_nodes>(initQuaternion, BOTTOM_TO_TOP, Phi_bottom_up, cusolverH);
+
+//     //  Compute Phi as std::array (bye bye Eigen)
+
+//     //  Compute K in parallel (memory already allocated)
+
+//     //  Construct A in parallel (kernels) as a memeber function
+
+//     //  Move copies in the constructor
+
+//     //  Solve the system
+//     while (t_state.KeepRunning()){
+//         initIntegrator<qStateDim>(qint_ptr, qe, cublasH);
+//         const auto Q_stack = integrateODE<qStateDim>(qint_ptr, cublasH, cusolverH);
+//     }
+// }
+// BENCHMARK(TestNumericalIntegration);
 
 
 
-    Eigen::VectorXd qe(9);
-    //  Here we give some value for the strain
 
-    qe <<   0,
-            0,
-            0,
-            1.28776905384098,
-           -1.63807577049031,
-            0.437404540900837,
-            0,
-            0,
-            0;
+// BENCHMARK_MAIN();
 
-    //Quaternions
-    constexpr int qStateDim = 4;
-    const Eigen::Vector4d initQuaternion(1, 0, 0, 0);
-
-    qIntegrator<qStateDim, num_ch_nodes>* qint_ptr = new qIntegrator<qStateDim, num_ch_nodes>(BOTTOM_TO_TOP, Phi_matrix, cusolverH);
-
-    while (t_state.KeepRunning()){
-        initIntegrator<qStateDim>(qint_ptr, qe, initQuaternion, cublasH, cusolverH);
-        const auto Q_stack = integrateODE<qStateDim>(qint_ptr, cublasH, cusolverH);
-    }
-}
-BENCHMARK(TestNumericalIntegration);
-
-
-
-
-BENCHMARK_MAIN();
-/*
 
 
 
@@ -134,26 +126,25 @@ int main(int argc, char *argv[]) {
     CUBLAS_CHECK(cublasCreate(&cublasH));
     CUSOLVER_CHECK(cusolverDnCreate(&cusolverH));
 
-
-
-    Eigen::VectorXd qe(9);
     //  Here we give some value for the strain
-
-    qe <<   0,
-            0,
-            0,
-            1.28776905384098,
-           -1.63807577049031,
-            0.437404540900837,
-            0,
-            0,
-            0;
+    std::vector<double> qe {
+        0,
+        0,
+        0,
+        1.28776905384098,
+        -1.63807577049031,
+        0.437404540900837,
+        0,
+        0,
+        0
+    };
 
     //Quaternions
     constexpr int qStateDim = 4;
-    const Eigen::Vector4d initQuaternion(1, 0, 0, 0);
+    //const Eigen::Vector4d initQuaternion(1, 0, 0, 0);
+    std::vector<double> initQuaternion{1, 0, 0, 0};
 
-    qIntegrator<qStateDim, num_ch_nodes>* qint_ptr = new qIntegrator<qStateDim, num_ch_nodes>(BOTTOM_TO_TOP, Phi_matrix, cusolverH);
+    qIntegrator<qStateDim, num_ch_nodes>* qint_ptr = new qIntegrator<qStateDim, num_ch_nodes>(initQuaternion, BOTTOM_TO_TOP, Phi_bottom_up, cusolverH);
 
     //  Compute Phi as std::array (bye bye Eigen)
 
@@ -164,8 +155,7 @@ int main(int argc, char *argv[]) {
     //  Move copies in the constructor
 
     //  Solve the system
-
-    initIntegrator<qStateDim>(qint_ptr, qe, initQuaternion, cublasH, cusolverH);
+    initIntegrator<qStateDim>(qint_ptr, qe, cublasH);
     const auto Q_stack = integrateODE<qStateDim>(qint_ptr, cublasH, cusolverH);
 
 
@@ -174,4 +164,3 @@ int main(int argc, char *argv[]) {
 
     return 0;
 }
-*/

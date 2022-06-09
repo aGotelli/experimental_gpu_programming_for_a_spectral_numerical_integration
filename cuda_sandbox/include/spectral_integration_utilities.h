@@ -39,23 +39,40 @@ Eigen::MatrixXd kroneckerProduct(const Eigen::MatrixXd A, const Eigen::MatrixXd 
  * \tparam t_ne The number of modes per strain coordinate
  * \return The basis matrix Phi for a given X
  */
+// template<unsigned int t_na, unsigned int t_ne, unsigned int numNodes>
+// static const std::array<Eigen::MatrixXd, numNodes> Phi(const std::array<double, numNodes> t_X, const double &t_begin=0, const double &t_end=1)
+// {
+//     std::array<Eigen::MatrixXd, numNodes> Phi;
+
+//     for (unsigned int i = 0; i < numNodes; ++i) {
+//         //  The coordinate must be transposed into the Chebyshev domain [-1, 1];
+//         double x = ( 2 * t_X[i] - ( t_end + t_begin) ) / ( t_end - t_begin );
+
+//         //  Compute the values of the polynomial for every element of the strain field
+//         Eigen::Matrix<double, t_ne, 1> Phi_i;
+//         for(unsigned int i=0; i<t_ne; i++)
+//             Phi_i[i] = boost::math::legendre_p(i, x);
+
+
+//         //  Define the matrix of bases
+//         Phi[i] = kroneckerProduct<t_na, t_na*t_ne>(Eigen::Matrix<double, t_na, t_na>::Identity(), Phi_i.transpose());
+//     }
+    
+//     return Phi;
+// }
+
 template<unsigned int t_na, unsigned int t_ne, unsigned int numNodes>
-static const std::array<Eigen::MatrixXd, numNodes> Phi(const std::array<double, numNodes> t_X, const double &t_begin=0, const double &t_end=1)
+static const std::array<double, numNodes*t_ne> Phi(const std::array<double, numNodes> t_X, const double &t_begin=0, const double &t_end=1)
 {
-    std::array<Eigen::MatrixXd, numNodes> Phi;
+    std::array<double, numNodes*t_ne> Phi;
 
     for (unsigned int i = 0; i < numNodes; ++i) {
         //  The coordinate must be transposed into the Chebyshev domain [-1, 1];
         double x = ( 2 * t_X[i] - ( t_end + t_begin) ) / ( t_end - t_begin );
 
         //  Compute the values of the polynomial for every element of the strain field
-        Eigen::Matrix<double, t_ne, 1> Phi_i;
-        for(unsigned int i=0; i<t_ne; i++)
-            Phi_i[i] = boost::math::legendre_p(i, x);
-
-
-        //  Define the matrix of bases
-        Phi[i] = kroneckerProduct<t_na, t_na*t_ne>(Eigen::Matrix<double, t_na, t_na>::Identity(), Phi_i.transpose());
+        for(unsigned int j=0; j<t_ne; j++)
+            Phi[i*t_na+j] = boost::math::legendre_p(j, x);
     }
     
     return Phi;
