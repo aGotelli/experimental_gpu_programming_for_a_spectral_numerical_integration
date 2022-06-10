@@ -27,6 +27,8 @@ const double* solveLinSys(qIntegrator<t_stateDim, num_ch_nodes>* base,
                              base->d_x0, 1, 
                              &beta, 
                              base->d_b_NN, 1));
+    //36079 ns
+
     CUBLAS_CHECK(cublasDgeam(t_cublasH, 
                              CUBLAS_OP_N, 
                              CUBLAS_OP_N, 
@@ -40,8 +42,9 @@ const double* solveLinSys(qIntegrator<t_stateDim, num_ch_nodes>* base,
                              unknownDim,
                              base->d_A_NN,
                              unknownDim));
+    //39835 ns
 
-    const int pivot_on = 0;
+    const int pivot_on = 1;
 
     if (pivot_on) {
         CUSOLVER_CHECK(cusolverDnDgetrf(t_cusolverH, 
@@ -52,6 +55,8 @@ const double* solveLinSys(qIntegrator<t_stateDim, num_ch_nodes>* base,
                                         base->d_work, 
                                         base->d_Ipiv, 
                                         base->d_info));
+        //353319 ns
+
         CUSOLVER_CHECK(cusolverDnDgetrs(t_cusolverH, 
                                         CUBLAS_OP_N, 
                                         unknownDim, 
@@ -62,6 +67,8 @@ const double* solveLinSys(qIntegrator<t_stateDim, num_ch_nodes>* base,
                                         base->d_b_NN, 
                                         unknownDim, 
                                         base->d_info));
+        //404174 ns
+
     } else {
         CUSOLVER_CHECK(cusolverDnDgetrf(t_cusolverH, 
                                         unknownDim, 
@@ -71,6 +78,8 @@ const double* solveLinSys(qIntegrator<t_stateDim, num_ch_nodes>* base,
                                         base->d_work, 
                                         NULL, 
                                         base->d_info));
+        //209586 ns
+        
         CUSOLVER_CHECK(cusolverDnDgetrs(t_cusolverH, 
                                         CUBLAS_OP_N, 
                                         unknownDim, 
@@ -81,6 +90,7 @@ const double* solveLinSys(qIntegrator<t_stateDim, num_ch_nodes>* base,
                                         base->d_b_NN, 
                                         unknownDim, 
                                         base->d_info));
+        //241247 ns
     }
 
     return base->d_b_NN;
@@ -99,6 +109,8 @@ const double* integrateODE(qIntegrator<t_stateDim, num_ch_nodes>* base,
     const double beta_pos = 1;
     
     CUBLAS_CHECK(cublasDgemv(t_cublasH, CUBLAS_OP_N, probDim, probDim, &alpha, base->d_P, probDim, base->d_b, 1, &beta, base->d_b, 1));
+    //5031 ns
+
     CUBLAS_CHECK(cublasDgemm(
         t_cublasH,
         CUBLAS_OP_N, CUBLAS_OP_N,
@@ -109,6 +121,7 @@ const double* integrateODE(qIntegrator<t_stateDim, num_ch_nodes>* base,
         &beta,
         base->d_A, probDim
     ));
+    //16348 ns
 
 
     CUBLAS_CHECK(cublasDgemm(
@@ -121,14 +134,18 @@ const double* integrateODE(qIntegrator<t_stateDim, num_ch_nodes>* base,
         &beta,
         base->d_A, probDim
     ));
+    //27663 ns
 
     CUBLAS_CHECK(cublasDcopy(
         t_cublasH, unknownDim,
         base->d_b+t_stateDim, 1,
         base->d_b_NN, 1
     ));
+    //29860 ns
 
     block_copy<<<unknownDim, unknownDim>>>(base->d_A, probDim, base->d_A_NN, unknownDim, t_stateDim, t_stateDim);
+    //31996 ns
+
     // for (unsigned int i = 0; i < unknownDim; ++i) {
     //     CUBLAS_CHECK(cublasDcopy(
     //         t_cublasH, unknownDim,
@@ -138,7 +155,6 @@ const double* integrateODE(qIntegrator<t_stateDim, num_ch_nodes>* base,
     // }
    
     return solveLinSys<t_stateDim>(base, t_cublasH, t_cusolverH);
-
 }
 
 #endif
