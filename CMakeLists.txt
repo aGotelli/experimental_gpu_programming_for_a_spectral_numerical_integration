@@ -9,6 +9,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 #set(CMAKE_BUILD_TYPE Debug)
 
 find_package(Eigen3 3.4 REQUIRED NO_MODULE)
+find_package(benchmark REQUIRED)
 
 include_directories(include)
 
