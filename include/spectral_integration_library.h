@@ -9,7 +9,7 @@
 
 constexpr unsigned int na = 3;  //  Kirkhoff rod
 constexpr unsigned int ne = 3;  // dimesion of qe
-constexpr unsigned int number_of_chebyshev_nodes = 11;
+constexpr unsigned int number_of_chebyshev_nodes = 16;
 
 /*!
  * \brief writeToFile writes a Eigen matrix into file
@@ -80,35 +80,52 @@ static const Eigen::MatrixXd integrateODE(const Eigen::VectorXd &t_initial_state
     typedef Eigen::Matrix<double, number_of_chebyshev_nodes, number_of_chebyshev_nodes> MatrixNchebNcheb;
 
     typedef Eigen::Matrix<double, number_of_chebyshev_nodes, t_state_dimension, Eigen::ColMajor> MatrixNchebNs;
+    //Quaternion: 28171 ns
 
     const MatrixNpNp  P = getP<t_state_dimension, number_of_chebyshev_nodes>();
+    //Quaternion: 179401 ns
 
     const MatrixNchebNcheb Dn = getDn<number_of_chebyshev_nodes>(t_direction);
+    //Quaternion: 260589 ns
     const MatrixNpNp D = Eigen::KroneckerProduct(Eigen::MatrixXd::Identity(t_state_dimension, t_state_dimension), Dn);
+    //Quaternion: 348201 ns
 
     const MatrixNpNp Ap = P.transpose() * A * P;
+    //Quaternion: 4847982 ns
     const MatrixNpNp Dp = P.transpose() * D * P;
+    //Quaternion: 9259881 ns
     const VectorNp bp   = P * b;
 
 //    const MatrixNpNs D_IT = Dp.block<prob_dimension, state_dimension>(0, 0);
     const MatrixNpNs D_IT = Dp.block(0, 0, prob_dimension, t_state_dimension);
+    //Quaternion: 9271547 ns
     const MatrixNpNs A_IT = Ap.block(0, 0, prob_dimension, t_state_dimension);
+    //Quaternion: 9271737 ns
     const VectorNp b_IT = ( D_IT - A_IT ) * t_initial_state;
+    //Quaternion: 9348664 ns
 
     const MatrixNuNu D_NN = Dp.block(t_state_dimension, t_state_dimension, unknow_state_dimension, unknow_state_dimension);
+    //Quaternion: 9362063 ns
     const MatrixNuNu A_NN = Ap.block(t_state_dimension, t_state_dimension, unknow_state_dimension, unknow_state_dimension);
+    //Quaternion: 9417226 ns
     const VectorNu ivp = b_IT.block(t_state_dimension, 0, unknow_state_dimension, 1);
+    //Quaternion: 9423439 ns
     const VectorNu b_NN   = bp.block(t_state_dimension, 0, unknow_state_dimension, 1);
+    //Quaternion: 9510764 ns
 
     const VectorNu X_NN = (D_NN - A_NN).inverse() * (b_NN - ivp);
+    //Quaternion: 12917772 ns
 
     const VectorNp X_tilde = P * (VectorNp() << t_initial_state, X_NN).finished();
+    //Quaternion: 12950755 ns
 
-    const MatrixNchebNs X_stack = Eigen::Map<const MatrixNchebNs>(X_tilde.data());
+    const MatrixNchebNs X_stack = Eigen::Map<const MatrixNchebNs>(X_tilde.data());\
+    //Quaternion: 13037364 ns
 
-    writeToFile(filename, X_stack);
+//    //writeToFile(filename, X_stack);
 
     return X_stack;
+//    return Eigen::Matrix<double, prob_dimension, prob_dimension>::Zero();
 }
 
 #endif

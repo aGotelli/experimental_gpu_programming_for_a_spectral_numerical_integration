@@ -295,10 +295,12 @@ static void TestNumericalIntegration(benchmark::State& t_state)
     constexpr unsigned int qStateDimension = 4;
     constexpr unsigned int problemDimension = qStateDimension * number_of_chebyshev_nodes;
     const auto q_A = getQuaternionA<qStateDimension>(qe);
+    //82185 ns
+
     const auto q_b = Eigen::Matrix<double, problemDimension, 1>::Zero();
     //  Define the initial state
     const Eigen::Vector4d initial_quaternion(1, 0, 0, 0); // Quaternion case
-    const auto Q = integrateODE<qStateDimension>(initial_quaternion, q_A, q_b, BOTTOM_TO_TOP, "Q_stack");
+//    const auto Q = integrateODE<qStateDimension>(initial_quaternion, q_A, q_b, BOTTOM_TO_TOP, "Q_stack");
     //Positions
 //    constexpr integrationDirection positionDirection = BOTTOM_TO_TOP;
 //    constexpr unsigned int positionStateDimension = 3;
@@ -342,6 +344,12 @@ static void TestNumericalIntegration(benchmark::State& t_state)
 //    const auto genForces = integrateODE<QadStateDimension>(initial_gen_forces, forces_A, forces_b, forcesDirection, "Qad_stack");
 
     while (t_state.KeepRunning()){
+//        constexpr unsigned int qStateDimension = 4;
+//        constexpr unsigned int problemDimension = qStateDimension * number_of_chebyshev_nodes;
+//        const auto q_A = getQuaternionA<qStateDimension>(qe);
+//        const auto q_b = Eigen::Matrix<double, problemDimension, 1>::Zero();
+//        //  Define the initial state
+//        const Eigen::Vector4d initial_quaternion(1, 0, 0, 0); // Quaternion case
         const auto Q = integrateODE<qStateDimension>(initial_quaternion, q_A, q_b, BOTTOM_TO_TOP, "Q_stack");
     }
 }
