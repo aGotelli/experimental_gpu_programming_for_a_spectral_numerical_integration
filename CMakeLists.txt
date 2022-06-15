@@ -20,11 +20,31 @@ add_library(quaternion_integrator include/quaternionintegrator.h
     )
 target_link_libraries(quaternion_integrator Eigen3::Eigen )
 
-add_executable(revised_integration src/revised_integration.cpp)
+add_executable(revised_integration
+                                       include/spectral_integration_quaternion.h
+                                       include/spectral_integration_position.h
+
+    src/revised_integration.cpp)
 target_link_libraries(revised_integration quaternion_integrator benchmark::benchmark)
 
-add_executable(spectral_integration main.cpp
-                                    include/tictoc.h
-                                    include/chebyshev_differentiation.h
-                                    include/spectral_integration_utilities.h)
-target_link_libraries(spectral_integration Eigen3::Eigen)
+
+
+
+
+
+
+#add_executable(spectral_integration main.cpp
+#                                    include/tictoc.h
+#                                    include/chebyshev_differentiation.h
+#                                    include/spectral_integration_utilities.h)
+#target_link_libraries(spectral_integration Eigen3::Eigen)
+
+
+
+
+
+#add_executable(revised_integration_quaternion src/revised_integration_quaternion.cpp)
+#target_link_libraries(revised_integration_quaternion Eigen3::Eigen benchmark::benchmark)
+
+#add_executable(revised_integration_position src/revised_integration_position.cpp)
+#target_link_libraries(revised_integration_position Eigen3::Eigen benchmark::benchmark)
