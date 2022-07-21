@@ -105,6 +105,7 @@ static const Eigen::MatrixXd integrateODE(const Eigen::VectorXd &t_initial_state
     //Quaternion: 9348664 ns
 
     const MatrixNuNu D_NN = Dp.block(t_state_dimension, t_state_dimension, unknow_state_dimension, unknow_state_dimension);
+    //std::cout << "D_NN : \n" << D_NN << std::endl;
     //Quaternion: 9362063 ns
     const MatrixNuNu A_NN = Ap.block(t_state_dimension, t_state_dimension, unknow_state_dimension, unknow_state_dimension);
     //Quaternion: 9417226 ns

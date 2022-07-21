@@ -3,7 +3,6 @@
 
 #include <Eigen/Dense>
 
-
 static Eigen::Matrix3d skew(const Eigen::Vector3d &t_v) {
 
     Eigen::Matrix3d v_hat;

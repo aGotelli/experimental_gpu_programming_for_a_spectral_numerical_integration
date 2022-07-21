@@ -199,81 +199,81 @@ Eigen::MatrixXd getQadb(Eigen::MatrixXd t_lambda) {
     return b;
 }
 
-//int main()
-//{
-//    //  Const curvature strain field
-//    Eigen::VectorXd qe(ne*na);
-//    //  Here we give some value for the strain
+int main()
+{
+    //  Const curvature strain field
+    Eigen::VectorXd qe(ne*na);
+    //  Here we give some value for the strain
 
-//    qe <<   0,
-//            0,
-//            0,
-//            1.28776905384098,
-//           -1.63807577049031,
-//            0.437404540900837,
-//            0,
-//            0,
-//            0;
+    qe <<   0,
+            0,
+            0,
+            1.28776905384098,
+           -1.63807577049031,
+            0.437404540900837,
+            0,
+            0,
+            0;
 
-//    //Quaternion
+    //Quaternion
 
-//    constexpr unsigned int qStateDimension = 4;
-//    constexpr unsigned int problemDimension = qStateDimension * number_of_chebyshev_nodes;
-//    const auto q_A = getQuaternionA<qStateDimension>(qe);
-//    const auto q_b = Eigen::Matrix<double, problemDimension, 1>::Zero();
-//    //  Define the initial state
-//    const Eigen::Vector4d initial_quaternion(1, 0, 0, 0); // Quaternion case
-//    const auto Q = integrateODE<qStateDimension>(initial_quaternion, q_A, q_b, BOTTOM_TO_TOP, "Q_stack");
-//    //Positions
-//    constexpr integrationDirection positionDirection = BOTTOM_TO_TOP;
-//    constexpr unsigned int positionStateDimension = 3;
-//    constexpr unsigned int positionProblemDimension = positionStateDimension * number_of_chebyshev_nodes;
-//    const auto position_A = Eigen::Matrix<double, positionProblemDimension, positionProblemDimension>::Zero();
+    constexpr unsigned int qStateDimension = 4;
+    constexpr unsigned int problemDimension = qStateDimension * number_of_chebyshev_nodes;
+    const auto q_A = getQuaternionA<qStateDimension>(qe);
+    const auto q_b = Eigen::Matrix<double, problemDimension, 1>::Zero();
+    //  Define the initial state
+    const Eigen::Vector4d initial_quaternion(1, 0, 0, 0); // Quaternion case
+    const auto Q = integrateODE<qStateDimension>(initial_quaternion, q_A, q_b, BOTTOM_TO_TOP, "Q_stack");
+    //Positions
+    constexpr integrationDirection positionDirection = BOTTOM_TO_TOP;
+    constexpr unsigned int positionStateDimension = 3;
+    constexpr unsigned int positionProblemDimension = positionStateDimension * number_of_chebyshev_nodes;
+    const auto position_A = Eigen::Matrix<double, positionProblemDimension, positionProblemDimension>::Zero();
 
-//    const auto position_b = getPositionb<positionStateDimension>(Q);
+    const auto position_b = getPositionb<positionStateDimension>(Q);
 
-//    const Eigen::Vector3d initial_position(0, 0, 0); // straight rod
-//    const auto r = integrateODE<positionStateDimension>(initial_position, position_A, position_b, positionDirection, "r_stack");
+    const Eigen::Vector3d initial_position(0, 0, 0); // straight rod
+    const auto r = integrateODE<positionStateDimension>(initial_position, position_A, position_b, positionDirection, "r_stack");
 
-//    //const auto r = integratePositions(initial_position, Q);
+    //const auto r = integratePositions(initial_position, Q);
 
-//    //Stresses
-//    constexpr integrationDirection lambdaDirection = TOP_TO_BOTTOM;
-//    constexpr unsigned int lambdaStateDimension = 6;
+    //Stresses
+    constexpr integrationDirection lambdaDirection = TOP_TO_BOTTOM;
+    constexpr unsigned int lambdaStateDimension = 6;
 
-//    const auto stresses_A = getStressesA(qe);
+    const auto stresses_A = getStressesA(qe);
 
-//    const auto stresses_b = getStressesb<lambdaStateDimension>(Q);
+    const auto stresses_b = getStressesb<lambdaStateDimension>(Q);
 
-//    const auto initial_stress = getInitialStress(Eigen::Quaterniond(Q.row(0)[0],
-//                                                                       Q.row(0)[1],
-//                                                                       Q.row(0)[2],
-//                                                                       Q.row(0)[3]));
-//    const auto lambda = integrateODE<lambdaStateDimension>(initial_stress, stresses_A, stresses_b, lambdaDirection, "lambda_stack");
+    const auto initial_stress = getInitialStress(Eigen::Quaterniond(Q.row(0)[0],
+                                                                       Q.row(0)[1],
+                                                                       Q.row(0)[2],
+                                                                       Q.row(0)[3]));
+    const auto lambda = integrateODE<lambdaStateDimension>(initial_stress, stresses_A, stresses_b, lambdaDirection, "lambda_stack");
 
-//    //General forces
-//    constexpr unsigned int QadStateDimension = 9;
-//    constexpr unsigned int QadProbDimension = QadStateDimension*number_of_chebyshev_nodes;
-//    constexpr integrationDirection forcesDirection = TOP_TO_BOTTOM;
+    //General forces
+    constexpr unsigned int QadStateDimension = 9;
+    constexpr unsigned int QadProbDimension = QadStateDimension*number_of_chebyshev_nodes;
+    constexpr integrationDirection forcesDirection = TOP_TO_BOTTOM;
 
-//    //  Declare the matrix for the system Ax = b
-//    const auto forces_A = Eigen::Matrix<double, QadProbDimension, QadProbDimension>::Zero();
+    //  Declare the matrix for the system Ax = b
+    const auto forces_A = Eigen::Matrix<double, QadProbDimension, QadProbDimension>::Zero();
 
-//    const auto forces_b = getQadb<QadStateDimension>(lambda);
+    const auto forces_b = getQadb<QadStateDimension>(lambda);
 
-//    //refer to equation 2.18
-//    const Eigen::Matrix<double, 9, 1> initial_gen_forces(0, 0, 0, 0, 0, 0, 0, 0, 0);
-//    //const auto genForces = integrateGenForces(initial_gen_forces, lambda);
-//    const auto genForces = integrateODE<QadStateDimension>(initial_gen_forces, forces_A, forces_b, forcesDirection, "Qad_stack");
+    //refer to equation 2.18
+    const Eigen::Matrix<double, 9, 1> initial_gen_forces(0, 0, 0, 0, 0, 0, 0, 0, 0);
+    //const auto genForces = integrateGenForces(initial_gen_forces, lambda);
+    const auto genForces = integrateODE<QadStateDimension>(initial_gen_forces, forces_A, forces_b, forcesDirection, "Qad_stack");
 
-//    std::cout << "Q_stack = \n" << Q << '\n' << std::endl;
-//    std::cout << "r_stack = \n" << r << '\n' << std::endl;
-//    std::cout << "Lambda_stack \n" << lambda << '\n' << std::endl;
-//    std::cout << "Gen_forces_stack \n" << genForces << '\n' << std::endl;
+    std::cout << "Q_stack = \n" << Q << '\n' << std::endl;
+    std::cout << "r_stack = \n" << r << '\n' << std::endl;
+    std::cout << "Lambda_stack \n" << lambda << '\n' << std::endl;
+    std::cout << "Gen_forces_stack \n" << genForces << '\n' << std::endl;
 
-//    return 0;
+    return 0;
 
-//}
+}
 
 static void TestNumericalIntegration(benchmark::State& t_state)
 {
@@ -358,4 +358,4 @@ BENCHMARK(TestNumericalIntegration);
 
 
 
-BENCHMARK_MAIN();
+//BENCHMARK_MAIN();
