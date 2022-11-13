@@ -7,9 +7,9 @@
 #include "spectral_integration_utilities.h"
 
 
-constexpr unsigned int na = 3;  //  Kirkhoff rod
+constexpr unsigned int na = 1;  //  Kirkhoff rod
 constexpr unsigned int ne = 3;  // dimesion of qe
-constexpr unsigned int number_of_chebyshev_nodes = 11;
+constexpr unsigned int number_of_chebyshev_nodes = 17;
 
 /*!
  * \brief writeToFile writes a Eigen matrix into file
@@ -81,22 +81,21 @@ static const Eigen::MatrixXd integrateODE(const Eigen::VectorXd &t_initial_state
 
     typedef Eigen::Matrix<double, number_of_chebyshev_nodes, t_state_dimension, Eigen::ColMajor> MatrixNchebNs;
 
-    const MatrixNpNp  P = getP<t_state_dimension, number_of_chebyshev_nodes>();
+    const auto  P = getP<t_state_dimension, number_of_chebyshev_nodes>();
 
-    const MatrixNchebNcheb Dn = getDn<number_of_chebyshev_nodes>(t_direction);
-    const MatrixNpNp D = Eigen::KroneckerProduct(Eigen::MatrixXd::Identity(t_state_dimension, t_state_dimension), Dn);
+    const auto Dn = getDn<number_of_chebyshev_nodes>(t_direction);
+    const auto D = Eigen::KroneckerProduct(Eigen::MatrixXd::Identity(t_state_dimension, t_state_dimension), Dn);
 
-    const MatrixNpNp Ap = P.transpose() * A * P;
-    const MatrixNpNp Dp = P.transpose() * D * P;
-    const VectorNp bp   = P * b;
+    const auto Ap = P.transpose() * A * P;
+    const auto Dp = P.transpose() * D * P;
+    const auto bp   = P * b;
 
-//    const MatrixNpNs D_IT = Dp.block<prob_dimension, state_dimension>(0, 0);
-    const MatrixNpNs D_IT = Dp.block(0, 0, prob_dimension, t_state_dimension);
-    const MatrixNpNs A_IT = Ap.block(0, 0, prob_dimension, t_state_dimension);
-    const VectorNp b_IT = ( D_IT - A_IT ) * t_initial_state;
+    const auto D_IT = Dp.block(0, 0, prob_dimension, t_state_dimension);
+    const auto A_IT = Ap.block(0, 0, prob_dimension, t_state_dimension);
+    const auto b_IT = ( D_IT - A_IT ) * t_initial_state;
 
-    const MatrixNuNu D_NN = Dp.block(t_state_dimension, t_state_dimension, unknow_state_dimension, unknow_state_dimension);
-    const MatrixNuNu A_NN = Ap.block(t_state_dimension, t_state_dimension, unknow_state_dimension, unknow_state_dimension);
+    const auto D_NN = Dp.block(t_state_dimension, t_state_dimension, unknow_state_dimension, unknow_state_dimension);
+    const auto A_NN = Ap.block(t_state_dimension, t_state_dimension, unknow_state_dimension, unknow_state_dimension);
     const VectorNu ivp = b_IT.block(t_state_dimension, 0, unknow_state_dimension, 1);
     const VectorNu b_NN   = bp.block(t_state_dimension, 0, unknow_state_dimension, 1);
 
@@ -106,7 +105,7 @@ static const Eigen::MatrixXd integrateODE(const Eigen::VectorXd &t_initial_state
 
     const MatrixNchebNs X_stack = Eigen::Map<const MatrixNchebNs>(X_tilde.data());
 
-    writeToFile(filename, X_stack);
+//    writeToFile(filename, X_stack);
 
     return X_stack;
 }

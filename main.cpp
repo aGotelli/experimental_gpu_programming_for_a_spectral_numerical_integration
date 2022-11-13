@@ -206,15 +206,15 @@ int main()
     Eigen::VectorXd qe(ne*na);
     //  Here we give some value for the strain
 
-    qe <<   0,
+    qe <<   /*0,
             0,
-            0,
+            0,*/
             1.28776905384098,
            -1.63807577049031,
-            0.437404540900837,
-            0,
-            0,
-            0;
+            0.437404540900837;
+//            0,
+//            0,
+//            0;
 
     //Quaternion
 
