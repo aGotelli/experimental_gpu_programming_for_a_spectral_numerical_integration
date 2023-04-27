@@ -10,25 +10,18 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 find_package(Eigen3 3.4 REQUIRED NO_MODULE)
 
-find_package(benchmark REQUIRED)
 
 include_directories(include)
 
-
-add_library(quaternion_integrator include/quaternionintegrator.h
-                                    src/quaternionintegrator.cpp
-    )
-target_link_libraries(quaternion_integrator Eigen3::Eigen )
-
-add_executable(revised_integration
-                                       include/spectral_integration_quaternion.h
-                                       include/spectral_integration_position.h
-
-    src/revised_integration.cpp)
-target_link_libraries(revised_integration quaternion_integrator benchmark::benchmark)
-
-
-
+add_executable(main
+    main.cpp
+    include/chebyshev_differentiation.h
+    include/utilities.h
+)
+target_link_libraries(main
+    PUBLIC
+        Eigen3::Eigen
+)
 
 
 
