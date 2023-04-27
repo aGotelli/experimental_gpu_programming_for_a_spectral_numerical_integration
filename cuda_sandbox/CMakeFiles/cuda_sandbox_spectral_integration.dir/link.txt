@@ -1,1 +1,0 @@
-/usr/bin/g++ CMakeFiles/cuda_sandbox_spectral_integration.dir/src/spectral_integration/spectral_integration.cu.o -o cuda_sandbox_spectral_integration  -lcusolver -lcublas -lcublasLt -lcusparse -lcusolverMg -lcudadevrt -lcudart_static -lrt -lpthread -ldl  -L"/usr/local/cuda/targets/x86_64-linux/lib/stubs" -L"/usr/local/cuda/targets/x86_64-linux/lib"

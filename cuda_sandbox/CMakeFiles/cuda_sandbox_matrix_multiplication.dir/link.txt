@@ -1,1 +1,0 @@
-/usr/bin/g++ CMakeFiles/cuda_sandbox_matrix_multiplication.dir/src/matrix_multiplication/example_matrix_multiplication.cu.o -o cuda_sandbox_matrix_multiplication  -lcublas -lcudadevrt -lcudart_static -lrt -lpthread -ldl  -L"/usr/local/cuda/targets/x86_64-linux/lib/stubs" -L"/usr/local/cuda/targets/x86_64-linux/lib"
