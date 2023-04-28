@@ -1,13 +1,13 @@
 #include "chebyshev_differentiation.h"
 #include "utilities.h"
 
-static constexpr unsigned int number_of_Chebyshev_points = 16;
+static const unsigned int number_of_Chebyshev_points = 16;
 
-static constexpr unsigned int state_dimension = 4;
+static const unsigned int quaternion_state_dimension = 4;
+static const unsigned int position_dimension = 3;
 
-static constexpr unsigned int problem_dimension = state_dimension * (number_of_Chebyshev_points-1);
-typedef Eigen::Matrix<double, problem_dimension, problem_dimension> MatrixNN;
-typedef Eigen::Matrix<double, problem_dimension, 1> VectorNd;
+
+static const unsigned int quaternion_problem_dimension = quaternion_state_dimension * (number_of_Chebyshev_points-1);
 
 static constexpr unsigned int ne = 3;
 static constexpr unsigned int na = 3;
@@ -17,42 +17,8 @@ static const auto x = ComputeChebyshevPoints<number_of_Chebyshev_points>();
 Eigen::Matrix<double, ne*na, 1> qe;
 
 
-Eigen::MatrixXd getQuaternionA(Eigen::VectorXd &t_qe) {
 
-    constexpr unsigned int probDimension = state_dimension*number_of_Chebyshev_points;
-
-    Eigen::Vector3d K;
-    Eigen::Matrix<double, state_dimension, state_dimension> A_at_chebyshev_point;
-    //  Declare the matrix for the system Ax = b
-    Eigen::Matrix<double, probDimension, probDimension> A =
-            Eigen::Matrix<double, probDimension, probDimension>::Zero();
-
-    for(unsigned int i=0; i < number_of_Chebyshev_points; i++){
-
-        //  Extract the curvature from the strain
-        K = Phi<na, ne>(x[i])*t_qe;
-
-        //  Compute the A matrix of Q' = 1/2 A(K) Q
-        A_at_chebyshev_point <<      0, -K(0),  -K(1),  -K(2),
-                                  K(0),     0,   K(2),  -K(1),
-                                  K(1), -K(2),      0,   K(0),
-                                  K(2),  K(1),  -K(0),      0;
-
-        A_at_chebyshev_point = 0.5*A_at_chebyshev_point;
-
-        for (unsigned int row = 0; row < A_at_chebyshev_point.rows(); ++row) {
-            for (unsigned int col = 0; col < A_at_chebyshev_point.cols(); ++col) {
-                int row_index = row*number_of_Chebyshev_points+i;
-                int col_index = col*number_of_Chebyshev_points+i;
-                A(row_index, col_index) = A_at_chebyshev_point(row, col);
-            }
-        }
-    }
-
-    return A;
-}
-
-void updateA(const Eigen::Matrix<double, ne*ne, 1> &t_qe, MatrixNN &A_NN, const MatrixNN &D_NN)
+void updateA(const Eigen::VectorXd &t_qe, Eigen::MatrixXd &A_NN, const Eigen::MatrixXd &D_NN)
 {
 
     //  Define the Chebyshev points on the unit circle
@@ -60,7 +26,7 @@ void updateA(const Eigen::Matrix<double, ne*ne, 1> &t_qe, MatrixNN &A_NN, const 
 
 
     Eigen::Vector3d K;
-    Eigen::Matrix<double, state_dimension, state_dimension> A_at_chebyshev_point;
+    Eigen::MatrixXd A_at_chebyshev_point(quaternion_state_dimension, quaternion_state_dimension);
     unsigned int left_corner_row;
     unsigned int left_corner_col;
     for(unsigned int i=0; i<x.size()-1; i++){
@@ -75,8 +41,8 @@ void updateA(const Eigen::Matrix<double, ne*ne, 1> &t_qe, MatrixNN &A_NN, const 
                                   K(2),  K(1),  -K(0),      0;
 
 
-        for (unsigned int row = 0; row < state_dimension; ++row) {
-            for (unsigned int col = 0; col < state_dimension; ++col) {
+        for (unsigned int row = 0; row < quaternion_state_dimension; ++row) {
+            for (unsigned int col = 0; col < quaternion_state_dimension; ++col) {
                 int row_index = row*(number_of_Chebyshev_points-1)+i;
                 int col_index = col*(number_of_Chebyshev_points-1)+i;
                 A_NN(row_index, col_index) = D_NN(row_index, col_index) - 0.5*A_at_chebyshev_point(row, col);
@@ -94,23 +60,28 @@ Eigen::VectorXd integrateQuaternions()
     const Eigen::MatrixXd Dn_NN = Dn.block<number_of_Chebyshev_points-1, number_of_Chebyshev_points-1>(0, 0);
     const Eigen::MatrixXd Dn_IN = Dn.block<number_of_Chebyshev_points-1, 1>(0, number_of_Chebyshev_points-1);
 
-    const Eigen::MatrixXd D = Eigen::KroneckerProduct(Eigen::MatrixXd::Identity(state_dimension, state_dimension), Dn);
-    const MatrixNN D_NN = Eigen::KroneckerProduct(Eigen::MatrixXd::Identity(state_dimension, state_dimension), Dn_NN);
+    const Eigen::MatrixXd D = Eigen::KroneckerProduct(Eigen::MatrixXd::Identity(quaternion_state_dimension, quaternion_state_dimension), Dn);
+    const Eigen::MatrixXd D_NN = Eigen::KroneckerProduct(Eigen::MatrixXd::Identity(quaternion_state_dimension, quaternion_state_dimension), Dn_NN);
 
-    const Eigen::MatrixXd D_IN = Eigen::KroneckerProduct(Eigen::MatrixXd::Identity(state_dimension, state_dimension), Dn_IN);
+    const Eigen::MatrixXd D_IN = Eigen::KroneckerProduct(Eigen::MatrixXd::Identity(quaternion_state_dimension, quaternion_state_dimension), Dn_IN);
 
 
-    MatrixNN A_NN = D_NN;
+    Eigen::MatrixXd A_NN = D_NN;
     updateA(qe, A_NN, D_NN);
 
     Eigen::VectorXd q_init(4);
     q_init << 1, 0, 0, 0;
 
+
     Eigen::VectorXd ivp = D_IN*q_init;
 
-    const auto b = VectorNd::Zero();
+    const auto b = Eigen::VectorXd::Zero(quaternion_problem_dimension);
 
-    Eigen::VectorXd Q_stack = A_NN.inverse() * (b - ivp);
+    const auto res = b - ivp;
+
+    Eigen::VectorXd Q_stack = A_NN.inverse() * res;
+
+    //  move back Q_stack
 
     return Q_stack;
 
@@ -118,9 +89,9 @@ Eigen::VectorXd integrateQuaternions()
 }
 
 
-Eigen::Matrix<double, number_of_Chebyshev_points-1, 3> updatePositionb(Eigen::MatrixXd t_Q_stack) {
+Eigen::MatrixXd updatePositionb(Eigen::MatrixXd t_Q_stack) {
 
-    Eigen::Matrix<double, number_of_Chebyshev_points-1, 3> b;
+    Eigen::Matrix<double, number_of_Chebyshev_points-1, position_dimension> b;
 
     Eigen::Quaterniond q;
 
@@ -145,7 +116,7 @@ Eigen::Matrix<double, number_of_Chebyshev_points-1, 3> updatePositionb(Eigen::Ma
 Eigen::MatrixXd integratePosition()
 {
     const auto Q_stack = integrateQuaternions();
-    Eigen::Matrix<double, number_of_Chebyshev_points-1, 3> b_NN;
+    Eigen::MatrixXd b_NN(number_of_Chebyshev_points-1, position_dimension);
 
 
     Eigen::Vector3d r_init;
@@ -159,11 +130,11 @@ Eigen::MatrixXd integratePosition()
     const auto Dn_NN_inv = Dn_NN.inverse();
     const Eigen::MatrixXd Dn_IN = Dn.block<number_of_Chebyshev_points-1, 1>(0, number_of_Chebyshev_points-1);
 
-    Eigen::Matrix<double, number_of_Chebyshev_points-1, 3> ivp;
+    Eigen::MatrixXd ivp(number_of_Chebyshev_points-1, position_dimension);
     for(unsigned int i=0; i<ivp.rows(); i++)
         ivp.row(i) = Dn_IN(i, 0) * r_init.transpose();
 
-    Eigen::Matrix<double, number_of_Chebyshev_points-1, 3> r_stack;
+    Eigen::MatrixXd r_stack(number_of_Chebyshev_points-1, position_dimension);
 
 
 
@@ -200,6 +171,17 @@ int main(int argc, char *argv[])
 
     const auto r_stack = integratePosition();
     std::cout << "r_stack : \n" << r_stack << std::endl;
+
+
+//    const auto Lambda_stack = integrateLambda();
+//    std::cout << "Q_stack : \n" << Q_stack << std::endl;
+
+
+//    const auto Qa_stack = integrateGeneralisedForces();
+//    std::cout << "r_stack : \n" << r_stack << std::endl;
+
+
+
 
     return 0;
 }
