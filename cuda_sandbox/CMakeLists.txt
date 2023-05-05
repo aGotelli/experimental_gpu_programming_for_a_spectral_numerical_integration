@@ -85,3 +85,20 @@ target_link_libraries(${PROJECT_NAME}_matrix_multiplication
         cublas
         Eigen3::Eigen
 )
+
+
+
+
+add_executable(${PROJECT_NAME}_matrix_inverse 
+		src/getrf/cusolver_getrf_example.cu
+)
+target_include_directories(${PROJECT_NAME}_matrix_inverse
+    PUBLIC
+        ${CUDA_INCLUDE_DIRS}
+)
+target_link_libraries(${PROJECT_NAME}_matrix_inverse
+    PUBLIC
+        cusolver
+        cublas
+        Eigen3::Eigen
+)

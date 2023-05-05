@@ -159,17 +159,18 @@ int main(int argc, char *argv[])
 
     Feel free to change these names, I do not like them neither...
     */
-    const int m = A.rows();
-    const int n = P.rows();
-    const int k = A.cols();
-    const int lda = m;
-    const int ldb = n;
-    const int ldc = k;
+    const int rows_A = A.rows();
+    const int cols_A = A.cols();
+    const int rows_P = P.rows();
+    const int cols_P = P.cols();
+    const int lda = rows_A;
+    const int ldb = rows_P;
+    const int ldc = rows_P;
 
 
 
-    Eigen::MatrixXd AP(, k);
-    Eigen::MatrixXd PAP(k, k);
+    Eigen::MatrixXd AP(rows_A, cols_A);
+    Eigen::MatrixXd PAP(rows_P, cols_P);
 
     const data_type alpha = 1.0;
     const data_type beta = 0.0;
@@ -223,102 +224,102 @@ int main(int argc, char *argv[])
 
 
 
-//     /* step 3: compute 
+    /* step 3: compute 
     
-//     Here we just do the two operations AP= A*P and PAP = transpose(P)*AP.
+    Here we just do the two operations AP= A*P and PAP = transpose(P)*AP.
 
-//     We use the function cublasDgemm which is composed of:
+    We use the function cublasDgemm which is composed of:
 
-//     clublas : CUDA implementation of the blas library (Basic Linear Algebra Subprograms)
-//     D : we are using matrices of double (double floating point precision)
-//     gemm : there is not a clear definition. The way I see it is GEneral Matrix Multiplication
+    clublas : CUDA implementation of the blas library (Basic Linear Algebra Subprograms)
+    D : we are using matrices of double (double floating point precision)
+    gemm : there is not a clear definition. The way I see it is GEneral Matrix Multiplication
 
 
-//     Now this function takes multiple parameters, everything is explained here : https://docs.nvidia.com/cuda/cublas/index.html#cublas-lt-t-gt-gemm
+    Now this function takes multiple parameters, everything is explained here : https://docs.nvidia.com/cuda/cublas/index.html#cublas-lt-t-gt-gemm
 
-//     I give some more details: 
+    I give some more details: 
    
    
-//     The function cublasDgemm actually performs the following operations
+    The function cublasDgemm actually performs the following operations
     
-//     C := alpha*op( A )op( B ) + betaC
+    C := alpha*op( A )op( B ) + beta C
 
-//     op( A ) and op( B ) are the operations performed on the matrices A and B respectively.
-//     These are respectively set as second and third parameters of the function.
-//     For example CUBLAS_OP_N will leave the matrix as it is wile CUBLAS_OP_T will transpose the matrix.
-//     alpha and beta are scaling factors. alpha can be used to scale the multiplication A*B by a constant scalar value 
-//     while beta will create a recursive increment on C. In our case, beta will typically be zero.
-//     m n and k express the number of rows and columns of the involved matrices. In this case, we have squared matrices
-//     thus they are all the same.
+    op( A ) and op( B ) are the operations performed on the matrices A and B respectively.
+    These are respectively set as second and third parameters of the function.
+    For example CUBLAS_OP_N will leave the matrix as it is wile CUBLAS_OP_T will transpose the matrix.
+    alpha and beta are scaling factors. alpha can be used to scale the multiplication A*B by a constant scalar value 
+    while beta will create a recursive increment on C. In our case, beta will typically be zero.
+    rows_A rows_P and cols_A express the number of rows and columns of the involved matrices. In this case, we have squared matrices
+    thus they are all the same.
 
-//     */
-//     tictoc.tic();
+    */
 
-//     CUBLAS_CHECK(
-//         cublasDgemm(cublasH, CUBLAS_OP_N, CUBLAS_OP_N, m, n, k, &alpha, d_A, lda, d_P, ldb, &beta, d_AP, ldc));
+    CUBLAS_CHECK(
+        cublasDgemm(cublasH, CUBLAS_OP_N, CUBLAS_OP_N, rows_A, rows_P, cols_A, &alpha, d_A, lda, d_P, ldb, &beta, d_AP, ldc)
+    );
 
-//     CUBLAS_CHECK(
-//         cublasDgemm(cublasH, CUBLAS_OP_T, CUBLAS_OP_N, m, n, k, &alpha, d_P, lda, d_AP, ldb, &beta, d_PAP, ldc));
+    CUBLAS_CHECK(
+        cublasDgemm(cublasH, CUBLAS_OP_T, CUBLAS_OP_N, rows_A, rows_P, cols_A, &alpha, d_P, lda, d_AP, ldb, &beta, d_PAP, ldc)
+    );
 
-//     tictoc.toc("Time to compute P' A P : ");
 
-//     /* step 4: copy data to host 
+    /* step 4: copy data to host 
     
-//     see that the function is the same as before, but now I am passing cudaMemcpyDeviceToHost to copy from the device to the host (CPU)
+    see that the function is the same as before, but now I am passing cudaMemcpyDeviceToHost to copy from the device to the host (CPU)
 
 
-//     This is necessary as I will need to print
+    This is necessary as I will need to print
     
-//     */
-//     CUDA_CHECK(
-//         cudaMemcpyAsync(PAP.data(), d_PAP, sizeof(data_type) * P.size(), cudaMemcpyDeviceToHost,stream)
-//     );
+    */
+    CUDA_CHECK(
+        cudaMemcpyAsync(PAP.data(), d_PAP, sizeof(data_type) * P.size(), cudaMemcpyDeviceToHost,stream)
+    );
 
 
-//     /*
-//     Before using the stuff in the host, wait for all the streams to have copied the data.
-//     */
-//     CUDA_CHECK(cudaStreamSynchronize(stream));
-
-
-
-
-//     /*
-//         Here If you want you can compare the results
-//     */
-//     Eigen::MatrixXd error = Ap - PAP;
-//     //std::cout<< "error = " << std::endl << error <<std::endl << std::endl;
+    /*
+    Before using the stuff in the host, wait for all the streams to have copied the data.
+    */
+    CUDA_CHECK(cudaStreamSynchronize(stream));
 
 
 
-//     /*
 
-//     ALWAYS AT THE END   
-
-//     Free the memory
-//     */
-
-//     CUDA_CHECK(cudaFree(d_A));
-//     CUDA_CHECK(cudaFree(d_P));
-//     CUDA_CHECK(cudaFree(d_AP));
-//     CUDA_CHECK(cudaFree(d_PAP));
+    /*
+        Here If you want you can compare the results
+    */
+    Eigen::MatrixXd error = Ap - PAP;
+    std::cout<< "error = " << std::endl << error.norm() <<std::endl << std::endl;
 
 
-//     /*
-//     Destry cuda objects
-//     */
-//     CUBLAS_CHECK(cublasDestroy(cublasH));
 
-//     CUDA_CHECK(cudaStreamDestroy(stream));
+    /*
 
-//     CUDA_CHECK(cudaDeviceReset());
+    ALWAYS AT THE END   
+
+    Free the memory
+    */
+
+    CUDA_CHECK(cudaFree(d_A));
+    CUDA_CHECK(cudaFree(d_P));
+    CUDA_CHECK(cudaFree(d_AP));
+    CUDA_CHECK(cudaFree(d_PAP));
+
+
+    /*
+    Destry cuda objects
+    */
+    CUBLAS_CHECK(cublasDestroy(cublasH));
+
+    CUDA_CHECK(cudaStreamDestroy(stream));
+
+    CUDA_CHECK(cudaDeviceReset());
 
     
 
 
-//     std::cout << "Program finished correctly" << std::endl;
+    std::cout << "Program finished correctly" << std::endl;
 
-//     return EXIT_SUCCESS;
+    return EXIT_SUCCESS;
 
 return 4;
 }
