@@ -56,13 +56,18 @@ void updateA(const Eigen::VectorXd &t_qe, Eigen::MatrixXd &A_NN, const Eigen::Ma
 
 Eigen::VectorXd integrateQuaternions()
 {
+    //  Obtain the Chebyshev differentiation matrix
     const Eigen::MatrixXd Dn = getDn<number_of_Chebyshev_points>();
+
+    //  Extract D_NN from the differentiation matrix (for the spectral integration)
     const Eigen::MatrixXd Dn_NN = Dn.block<number_of_Chebyshev_points-1, number_of_Chebyshev_points-1>(0, 0);
+
+    //  Extract D_IN (for the propagation of initial conditions)
     const Eigen::MatrixXd Dn_IN = Dn.block<number_of_Chebyshev_points-1, 1>(0, number_of_Chebyshev_points-1);
 
-    const Eigen::MatrixXd D = Eigen::KroneckerProduct(Eigen::MatrixXd::Identity(quaternion_state_dimension, quaternion_state_dimension), Dn);
-    const Eigen::MatrixXd D_NN = Eigen::KroneckerProduct(Eigen::MatrixXd::Identity(quaternion_state_dimension, quaternion_state_dimension), Dn_NN);
 
+    //  Now stack the matrices in the diagonal of bigger ones (as meny times as the state dimension)
+    const Eigen::MatrixXd D_NN = Eigen::KroneckerProduct(Eigen::MatrixXd::Identity(quaternion_state_dimension, quaternion_state_dimension), Dn_NN);
     const Eigen::MatrixXd D_IN = Eigen::KroneckerProduct(Eigen::MatrixXd::Identity(quaternion_state_dimension, quaternion_state_dimension), Dn_IN);
 
 
@@ -125,9 +130,16 @@ Eigen::MatrixXd integratePosition()
               0;
 
 
+    //  Get the diffetentiation matrix
     const Eigen::MatrixXd Dn = getDn<number_of_Chebyshev_points>();
+
+    //  Extract the submatrix responsible for the spectral integration
     const Eigen::MatrixXd Dn_NN = Dn.block<number_of_Chebyshev_points-1, number_of_Chebyshev_points-1>(0, 0);
+
+    //  This matrix remains constant so we can pre invert
     const auto Dn_NN_inv = Dn_NN.inverse();
+
+    //  Extract the submatrix responsible for propagating the initial conditions
     const Eigen::MatrixXd Dn_IN = Dn.block<number_of_Chebyshev_points-1, 1>(0, number_of_Chebyshev_points-1);
 
     Eigen::MatrixXd ivp(number_of_Chebyshev_points-1, position_dimension);
