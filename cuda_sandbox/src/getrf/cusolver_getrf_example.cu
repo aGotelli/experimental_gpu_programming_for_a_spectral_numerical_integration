@@ -18,7 +18,6 @@
 
 #include <iostream>
 
-#include "tictoc.h"
 
 
 
@@ -52,7 +51,6 @@ int main(int argc, char *argv[])
     cusolverDnHandle_t cusolverH = NULL;
     cudaStream_t stream = NULL;
 
-    tictoc preprocessing, lu_factorization, inversion;
 
 
 
@@ -143,7 +141,7 @@ int main(int argc, char *argv[])
     So we really need to check the matrices before insterting or not the pivoting.
     
 
-    I think (and hope) that we do not need it.
+    We do not need it.
 
     */
 
@@ -152,39 +150,58 @@ int main(int argc, char *argv[])
     
         same reason as in matrix multiplication 
      */
-    CUSOLVER_CHECK(cusolverDnCreate(&cusolverH));
+    CUSOLVER_CHECK(
+        cusolverDnCreate(&cusolverH)
+    );
 
-    CUDA_CHECK(cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking));
-    CUSOLVER_CHECK(cusolverDnSetStream(cusolverH, stream));
+    CUDA_CHECK(
+        cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking)
+    );
+    CUSOLVER_CHECK(
+        cusolverDnSetStream(cusolverH, stream)
+    );
 
 
     
     
     /* step 2: allocate and copy A to device */
-    CUDA_CHECK(cudaMalloc(reinterpret_cast<void **>(&d_A), sizeof(double) * m*m));
-    CUDA_CHECK(cudaMalloc(reinterpret_cast<void **>(&d_B), sizeof(double) * m));
-    CUDA_CHECK(cudaMalloc(reinterpret_cast<void **>(&d_Ipiv), sizeof(int) * Ipiv.size()));
-    CUDA_CHECK(cudaMalloc(reinterpret_cast<void **>(&d_info), sizeof(int)));
+    CUDA_CHECK(
+        cudaMalloc(reinterpret_cast<void **>(&d_A), sizeof(double) * m*m)
+    );
+    CUDA_CHECK(
+        cudaMalloc(reinterpret_cast<void **>(&d_B), sizeof(double) * m)
+    );
+    CUDA_CHECK(
+        cudaMalloc(reinterpret_cast<void **>(&d_Ipiv), sizeof(int) * Ipiv.size())
+    );
+    CUDA_CHECK(
+        cudaMalloc(reinterpret_cast<void **>(&d_info), sizeof(int))
+    );
 
    
-    preprocessing.tic();
 
 
      CUDA_CHECK(
-        cudaMemcpyAsync(d_A, h_A, sizeof(double) * m*m, cudaMemcpyHostToDevice, stream));
+        cudaMemcpyAsync(d_A, h_A, sizeof(double) * m*m, cudaMemcpyHostToDevice, stream)
+    );
     CUDA_CHECK(
-        cudaMemcpyAsync(d_B, h_b, sizeof(double) * m, cudaMemcpyHostToDevice, stream));
+        cudaMemcpyAsync(d_B, h_b, sizeof(double) * m, cudaMemcpyHostToDevice, stream)
+    );
     CUDA_CHECK(
-    cudaMemcpy(d_info, &info, sizeof(int), cudaMemcpyHostToDevice));
+        cudaMemcpy(d_info, &info, sizeof(int), cudaMemcpyHostToDevice)
+    );
 
      /* step 3: query working space of getrf */
     //  cuda solver api need CUSOLVER_CHECK
-    CUSOLVER_CHECK(cusolverDnDgetrf_bufferSize(cusolverH, m, m, d_A, lda, &lwork));
+    CUSOLVER_CHECK(
+        cusolverDnDgetrf_bufferSize(cusolverH, m, m, d_A, lda, &lwork)
+    );
 
     //  common CUDA need CUDA_CHECK
-    CUDA_CHECK(cudaMalloc(reinterpret_cast<void **>(&d_work), sizeof(double) * lwork));
+    CUDA_CHECK(
+        cudaMalloc(reinterpret_cast<void **>(&d_work), sizeof(double) * lwork)
+    );
 
-    preprocessing.toc("Preprocessing");
 
     /*
     From the output you will see how expensive is copy this stuff....
@@ -208,7 +225,6 @@ int main(int argc, char *argv[])
     
     */
 
-    lu_factorization.tic();
 
 
     if (pivot_on) {
@@ -218,10 +234,6 @@ int main(int argc, char *argv[])
     }
 
 
-    lu_factorization.toc("LU factorization");
-
-
-    inversion.tic();
 
     /*
      * step 5: solve A*X = B
@@ -245,7 +257,6 @@ int main(int argc, char *argv[])
     }
 
 
-    inversion.toc("Finish of the inversion");
 
 
     /* free resources */

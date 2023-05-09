@@ -9,3 +9,5 @@ latex/
 project3.code-workspace
 
 .vscode/
+
+*.code-workspace
