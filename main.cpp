@@ -89,16 +89,21 @@ Eigen::VectorXd integrateQuaternions()
 
     Eigen::VectorXd ivp = D_IN*q_init;
 
-    const auto b = Eigen::VectorXd::Zero(quaternion_problem_dimension);
+    auto b = Eigen::VectorXd::Zero(quaternion_problem_dimension);
 
-    const auto res = b - ivp;
+    b -= ivp;
 
-    Eigen::VectorXd Q_stack = C_NN.inverse() * res;
+    // b = alpha*D_IN*q_init + beta*b
+    // alpha = -1
+    // beta = 1
+
+    //  copy C_NN, res Q_stack in GPU
+
+    Eigen::VectorXd Q_stack = C_NN.inverse() * b;
 
     //  move back Q_stack
 
     return Q_stack;
-
 
 }
 

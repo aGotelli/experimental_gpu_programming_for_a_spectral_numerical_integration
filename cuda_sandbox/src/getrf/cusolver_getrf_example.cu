@@ -181,7 +181,7 @@ int main(int argc, char *argv[])
    
 
 
-     CUDA_CHECK(
+    CUDA_CHECK(
         cudaMemcpyAsync(d_A, h_A, sizeof(double) * m*m, cudaMemcpyHostToDevice, stream)
     );
     CUDA_CHECK(
