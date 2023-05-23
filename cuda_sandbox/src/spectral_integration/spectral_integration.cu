@@ -4,7 +4,6 @@
 #include <utility>
 
 #include <cusolverDn.h>
-
 #include "cusolver_utils.h"
 
 #include "tictoc.h" //  Mesuring runtime

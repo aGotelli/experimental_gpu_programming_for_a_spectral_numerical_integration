@@ -3,28 +3,30 @@
 
 #include <Eigen/Dense>
 
+// COMMENTED BY BERNARD
+// static Eigen::Matrix3d skew(const Eigen::Vector3d &t_v) {
 
-static Eigen::Matrix3d skew(const Eigen::Vector3d &t_v) {
+//     Eigen::Matrix3d v_hat;
+//     v_hat <<  0   ,  -t_v(2),   t_v(1),
+//             t_v(2),     0   ,  -t_v(0),
+//            -t_v(1),   t_v(0),     0   ;
 
-    Eigen::Matrix3d v_hat;
-    v_hat <<  0   ,  -t_v(2),   t_v(1),
-            t_v(2),     0   ,  -t_v(0),
-           -t_v(1),   t_v(0),     0   ;
+//     return v_hat;
+// }
 
-    return v_hat;
-}
 
-static Eigen::MatrixXd ad(const Eigen::VectorXd &t_strain){
-    //  Decompose the strain
-    const Eigen::Vector3d k = t_strain.block<3,1>(0,0);
-    const Eigen::Vector3d gamma = t_strain.block<3,1>(3,0);
+// COMMENTED BY BERNARD
+// static Eigen::MatrixXd ad(const Eigen::VectorXd &t_strain){
+//     //  Decompose the strain
+//     const Eigen::Vector3d k = t_strain.block<3,1>(0,0);
+//     const Eigen::Vector3d gamma = t_strain.block<3,1>(3,0);
 
-    Eigen::MatrixXd ad(6,6);
-    ad << skew(k)    , Eigen::Matrix3d::Zero(),
-          skew(gamma),          skew(k) ;
+//     Eigen::MatrixXd ad(6,6);
+//     ad << skew(k)    , Eigen::Matrix3d::Zero(),
+//           skew(gamma),          skew(k) ;
 
-    return ad;
-}
+//     return ad;
+// }
 
 static Eigen::MatrixXd Ad(const Eigen::Matrix3d &t_R,
                    const Eigen::Vector3d &t_r){

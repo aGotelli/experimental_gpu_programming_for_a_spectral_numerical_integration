@@ -102,3 +102,27 @@ target_link_libraries(${PROJECT_NAME}_matrix_inverse
         cublas
         Eigen3::Eigen
 )
+
+
+add_executable(${PROJECT_NAME}_main 
+        src/main/main.cu
+        include/chebyshev_differentiation.h
+        include/utilities.h
+        include/spectral_integration_utilities.h
+        include/lie_algebra_utilities.h
+        include/globals.h
+        include/getCusolverErrorString.h
+
+
+)
+target_include_directories(${PROJECT_NAME}_main
+    PUBLIC
+        ${CUDA_INCLUDE_DIRS}
+)
+target_link_libraries(${PROJECT_NAME}_main
+    PUBLIC
+        cusolver
+        cublas
+        Eigen3::Eigen
+)
+
