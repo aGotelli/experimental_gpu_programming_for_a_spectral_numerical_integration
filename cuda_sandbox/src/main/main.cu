@@ -1,5 +1,22 @@
-﻿#include "chebyshev_differentiation.h"
-#include "utilities.h"
+﻿#include <cstdio>
+#include <cstdlib>
+#include <vector>
+
+#include <fstream>
+
+//  CUDQ Basic Linear Algebra 
+#include <cublas_v2.h>
+// // #include <cuda_runtime.h>
+
+#include "spectral_integration_utilities.h"
+#include "chebyshev_differentiation.h"
+#include "lie_algebra_utilities.h"
+#include "utilities.h"  //  Utilities for error handling (must be after cublas or cusolver)
+#include "globals.h"
+#include "getCusolverErrorString.h"
+
+#include <Eigen/Dense>
+#include <unsupported/Eigen/KroneckerProduct>
 
 
 static const unsigned int number_of_Chebyshev_points = 16;
@@ -13,8 +30,8 @@ static const unsigned int lambda_dimension = 6;
 static const unsigned int Qa_dimension = 9;
 
 
-static constexpr unsigned int ne = 3;
-static constexpr unsigned int na = 3;
+// static constexpr unsigned int ne = 3;
+// static constexpr unsigned int na = 3;
 
 
 Eigen::Matrix<double, ne*na, 1> qe;
@@ -66,6 +83,25 @@ Eigen::MatrixXd computeCMatrix(const Eigen::VectorXd &t_qe, const Eigen::MatrixX
 
 Eigen::VectorXd integrateQuaternions()
 {
+    cusolverDnHandle_t cusolverH = NULL;
+    cublasHandle_t cublasH = NULL;
+    cudaStream_t stream = NULL;
+
+
+    CUBLAS_CHECK(
+        cublasCreate(&cublasH)
+    );
+    CUSOLVER_CHECK(
+        cusolverDnCreate(&cusolverH)
+    );
+    CUDA_CHECK(
+        cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking)
+    );
+    CUSOLVER_CHECK(
+        cusolverDnSetStream(cusolverH, stream)
+    );
+
+
     //  Obtain the Chebyshev differentiation matrix
     const Eigen::MatrixXd Dn = getDn<number_of_Chebyshev_points>();
 
@@ -77,8 +113,8 @@ Eigen::VectorXd integrateQuaternions()
 
 
     //  Now stack the matrices in the diagonal of bigger ones (as meny times as the state dimension)
-    const Eigen::MatrixXd D_NN = Eigen::KroneckerProduct(Eigen::MatrixXd::Identity(quaternion_state_dimension, quaternion_state_dimension), Dn_NN);
-    const Eigen::MatrixXd D_IN = Eigen::KroneckerProduct(Eigen::MatrixXd::Identity(quaternion_state_dimension, quaternion_state_dimension), Dn_IN);
+    const Eigen::MatrixXd D_NN = Eigen::KroneckerProduct<Eigen::MatrixXd,Eigen::MatrixXd>(Eigen::MatrixXd::Identity(quaternion_state_dimension, quaternion_state_dimension), Dn_NN);
+    const Eigen::MatrixXd D_IN = Eigen::KroneckerProduct<Eigen::MatrixXd,Eigen::MatrixXd>(Eigen::MatrixXd::Identity(quaternion_state_dimension, quaternion_state_dimension), Dn_IN);
 
 
     Eigen::MatrixXd C_NN =  computeCMatrix(qe, D_NN);
@@ -91,13 +127,104 @@ Eigen::VectorXd integrateQuaternions()
 
     const auto b = Eigen::VectorXd::Zero(quaternion_problem_dimension);
 
-    const auto res = b - ivp;
+    const Eigen::MatrixXd res = b - ivp;
 
-    Eigen::VectorXd Q_stack = C_NN.inverse() * res;
+    //Definition of matrices dimensions.
+
+    const int rows_C_NN = C_NN.rows();
+    const int cols_C_NN = C_NN.cols();
+    const int ld_C_NN = rows_C_NN;
+
+    const int rows_res = res.rows();
+    const int cols_res = res.cols();
+    const int ld_res = rows_res;
+
+    
+    const int rows_Q_stack = rows_C_NN;
+    const int cols_Q_stack = cols_res;
+    const int ld_Q_stack = rows_Q_stack;
+
+    //What we want to calculate
+    Eigen::MatrixXd Qstack_CUDA = Eigen::MatrixXd::Zero(rows_Q_stack, cols_Q_stack);
+
+    int info = 0;
+
+    int lwork = 0;
+
+
+    // Create Pointers
+    double* d_Q_stack = nullptr;
+    double* d_C_NN = nullptr;
+    double* d_res = nullptr;
+    double* d_work = nullptr;
+    int* d_info = nullptr;
+    
+    // Compute the memory occupation
+    const auto size_of_double = sizeof(double);
+    const auto size_of_Q_stack_in_bytes = size_of_double * rows_Q_stack * cols_Q_stack;
+    const auto size_of_C_NN_in_bytes = size_of_double * C_NN.size();
+    const auto size_of_res_in_bytes = size_of_double * res.size();
+
+    // Allocate the memory
+    CUDA_CHECK(
+        cudaMalloc(reinterpret_cast<void **>(&d_Q_stack), size_of_Q_stack_in_bytes)
+    );
+    CUDA_CHECK(
+        cudaMalloc(reinterpret_cast<void **>(&d_C_NN), size_of_C_NN_in_bytes)
+    );
+    CUDA_CHECK(
+        cudaMalloc(reinterpret_cast<void **>(&d_res), size_of_res_in_bytes)
+    );
+    CUDA_CHECK(
+        cudaMalloc(reinterpret_cast<void **>(&d_info), sizeof(int))
+    );
+    
+
+
+    //  Copy the data: cudaMemcpy(destination, file_to_copy, size_of_the_file, std_cmd)
+    CUDA_CHECK(
+        cudaMemcpy(d_C_NN, C_NN.data(), size_of_C_NN_in_bytes, cudaMemcpyHostToDevice)
+    );
+    CUDA_CHECK(
+        cudaMemcpy(d_res, res.data(), size_of_res_in_bytes, cudaMemcpyHostToDevice)
+    );
+    CUDA_CHECK(
+        cudaMemcpy(d_info, &info, sizeof(int), cudaMemcpyHostToDevice)
+    );
+
+
+    // Allocates buffer size for the LU decomposition
+    cusolverStatus_t status = cusolverDnDgetrf_bufferSize(cusolverH, rows_C_NN, cols_C_NN, d_C_NN, ld_C_NN, &lwork);
+    if (status != CUSOLVER_STATUS_SUCCESS)
+    {
+        std::cerr << "cusolver error: " << getCusolverErrorString(status) << std::endl;
+        // Handle or debug the error appropriately
+    };
+
+
+
+    //Has to be after cusolverDnDgetrf_bufferSize as lwork is only computed then.
+    CUDA_CHECK(
+        cudaMalloc(reinterpret_cast<void **>(&d_work), sizeof(double) * lwork)
+    );
+
+
+    // LU factorization
+    CUSOLVER_CHECK(
+        cusolverDnDgetrf(cusolverH, rows_C_NN, cols_C_NN, d_C_NN, ld_C_NN, d_work, NULL, d_info));
+
+    // Solving the final system
+    CUSOLVER_CHECK(
+        cusolverDnDgetrs(cusolverH, CUBLAS_OP_N, rows_C_NN, 1, d_C_NN, ld_C_NN, NULL, d_res, ld_res, d_info));
+
+    CUDA_CHECK(
+        cudaMemcpyAsync(Qstack_CUDA.data(), d_C_NN, size_of_C_NN_in_bytes, cudaMemcpyDeviceToHost, stream));
+
+    // Eigen::VectorXd Q_stack = C_NN.inverse() * res;
 
     //  move back Q_stack
 
-    return Q_stack;
+    return Qstack_CUDA;
 
 
 }
@@ -218,8 +345,8 @@ Eigen::MatrixXd integrateInternalForces()
 
 
     //  Now stack the matrices in the diagonal of bigger ones (as meny times as the state dimension)
-    const Eigen::MatrixXd D_NN = Eigen::KroneckerProduct(Eigen::MatrixXd::Identity(lambda_dimension/2, lambda_dimension/2), Dn_NN);
-    const Eigen::MatrixXd D_IN = Eigen::KroneckerProduct(Eigen::MatrixXd::Identity(lambda_dimension/2, lambda_dimension/2), Dn_IN);
+    const Eigen::MatrixXd D_NN = Eigen::KroneckerProduct<Eigen::MatrixXd,Eigen::MatrixXd>(Eigen::MatrixXd::Identity(lambda_dimension/2, lambda_dimension/2), Dn_NN);
+    const Eigen::MatrixXd D_IN = Eigen::KroneckerProduct<Eigen::MatrixXd,Eigen::MatrixXd>(Eigen::MatrixXd::Identity(lambda_dimension/2, lambda_dimension/2), Dn_IN);
 
     Eigen::MatrixXd C_NN =  updateCMatrix(qe, D_NN);
 
@@ -291,8 +418,8 @@ Eigen::MatrixXd integrateInternalCouples()
 
 
     //  Now stack the matrices in the diagonal of bigger ones (as meny times as the state dimension)
-    const Eigen::MatrixXd D_NN = Eigen::KroneckerProduct(Eigen::MatrixXd::Identity(lambda_dimension/2, lambda_dimension/2), Dn_NN); // Dimension: 45x45
-    const Eigen::MatrixXd D_IN = Eigen::KroneckerProduct(Eigen::MatrixXd::Identity(lambda_dimension/2, lambda_dimension/2), Dn_IN); // Dimension: 45x3
+    const Eigen::MatrixXd D_NN = Eigen::KroneckerProduct<Eigen::MatrixXd,Eigen::MatrixXd>(Eigen::MatrixXd::Identity(lambda_dimension/2, lambda_dimension/2), Dn_NN); // Dimension: 45x45
+    const Eigen::MatrixXd D_IN = Eigen::KroneckerProduct<Eigen::MatrixXd,Eigen::MatrixXd>(Eigen::MatrixXd::Identity(lambda_dimension/2, lambda_dimension/2), Dn_IN); // Dimension: 45x3
 
     Eigen::MatrixXd C_NN =  updateCMatrix(qe, D_NN);
 
@@ -414,6 +541,52 @@ Eigen::MatrixXd integrateGeneralisedForces(Eigen::MatrixXd t_Lambda_stack)
 
 int main(int argc, char *argv[])
 {
+    cusolverDnHandle_t cusolverH = NULL;
+    cublasHandle_t cublasH = NULL;
+    cudaStream_t stream = NULL;
+
+
+/* step 1: create cublas handle, bind a stream 
+
+    Explaination:
+
+    The handler is an object which is used to manage the api in its threads and eventually thrown errors
+
+
+    Then there are the streams. But we don't need to know what they are.
+    We do not use them for now.
+
+    If you are interested:
+
+    Streams define the flow of data when copying.
+    Imagine: We have 100 units of data (whatever it is) to copy from one place to another.
+    Memory is already allocated. 
+    Normal way: copy data 1, then data 2, than data 3, ..... untill the end.
+
+    With streams, we copy data in parallel. It boils down to this.
+    Here you can find a more detailed and clear explaination (with figures)
+
+    Look only at the first 6 slides
+
+    https://on-demand.gputechconf.com/gtc/2014/presentations/S4158-cuda-streams-best-practices-common-pitfalls.pdf
+
+*/
+    //  cuda blas api need CUBLAS_CHECK
+    CUBLAS_CHECK(
+        cublasCreate(&cublasH)
+    );
+
+    CUSOLVER_CHECK(
+        cusolverDnCreate(&cusolverH)
+    );
+
+    CUDA_CHECK(
+        cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking)
+    );
+
+    CUSOLVER_CHECK(
+        cusolverDnSetStream(cusolverH, stream)
+    );
 
 
     //  Here we give some value for the strain
@@ -431,7 +604,6 @@ int main(int argc, char *argv[])
     const auto Q_stack = integrateQuaternions();
     std::cout << "Q_stack : \n" << Q_stack << std::endl;
 
-
     // const auto r_stack = integratePosition();
     // std::cout << "r_stack : \n" << r_stack << std::endl;
 
@@ -441,10 +613,8 @@ int main(int argc, char *argv[])
     // const auto C_stack = integrateInternalCouples();
     // std::cout << "C_stack : \n" << C_stack << "\n" << std::endl;
 
-
     // const auto Lambda_stack = buildLambda(C_stack, N_stack);
     // std::cout << "Lambda_stack : \n" << Lambda_stack << "\n" << std::endl;
-
 
     // const auto Qa_stack = integrateGeneralisedForces(Lambda_stack);
     // std::cout << "Qa_stack : \n" << Qa_stack << std::endl;

@@ -122,7 +122,6 @@ int main(int argc, char *argv[])
     */
 
 
-
     std::vector<int> Ipiv(m, 0);
     int info = 0;
 
@@ -220,7 +219,7 @@ int main(int argc, char *argv[])
     /* step 4: LU factorization 
     
     A good explaination is given here 
-    https://docs.nvidia.com/cuda/cusolver/index.html#cuSolverDN-lt-t-gt-getrf
+    https://docs.nvidia.com/cuda/cusolver/index.html#LUcuSolverDN-lt-t-gt-getrf
 
     
     */
