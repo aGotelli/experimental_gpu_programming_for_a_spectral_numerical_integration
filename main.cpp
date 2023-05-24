@@ -83,6 +83,8 @@ Eigen::VectorXd integrateQuaternions()
 
     Eigen::MatrixXd C_NN =  computeCMatrix(qe, D_NN);
 
+    std::cout << "C_NN: " << C_NN << std::endl;
+
     Eigen::VectorXd q_init(4);
     q_init << 1, 0, 0, 0;
 

@@ -127,7 +127,7 @@ Eigen::VectorXd integrateQuaternions()
 
     const auto b = Eigen::VectorXd::Zero(quaternion_problem_dimension);
 
-    const Eigen::MatrixXd res = b - ivp;
+    const Eigen::VectorXd res = b - ivp;
 
     //Definition of matrices dimensions.
 
@@ -218,7 +218,7 @@ Eigen::VectorXd integrateQuaternions()
         cusolverDnDgetrs(cusolverH, CUBLAS_OP_N, rows_C_NN, 1, d_C_NN, ld_C_NN, NULL, d_res, ld_res, d_info));
 
     CUDA_CHECK(
-        cudaMemcpyAsync(Qstack_CUDA.data(), d_C_NN, size_of_C_NN_in_bytes, cudaMemcpyDeviceToHost, stream));
+        cudaMemcpy(Qstack_CUDA.data(), d_res, size_of_res_in_bytes, cudaMemcpyDeviceToHost));
 
     // Eigen::VectorXd Q_stack = C_NN.inverse() * res;
 
@@ -543,7 +543,6 @@ int main(int argc, char *argv[])
 {
     cusolverDnHandle_t cusolverH = NULL;
     cublasHandle_t cublasH = NULL;
-    cudaStream_t stream = NULL;
 
 
 /* step 1: create cublas handle, bind a stream 
@@ -578,14 +577,6 @@ int main(int argc, char *argv[])
 
     CUSOLVER_CHECK(
         cusolverDnCreate(&cusolverH)
-    );
-
-    CUDA_CHECK(
-        cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking)
-    );
-
-    CUSOLVER_CHECK(
-        cusolverDnSetStream(cusolverH, stream)
     );
 
 
