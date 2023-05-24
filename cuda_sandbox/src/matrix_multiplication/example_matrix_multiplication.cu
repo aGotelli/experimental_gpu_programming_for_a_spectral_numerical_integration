@@ -13,6 +13,12 @@
 
 #include <Eigen/Dense>
 
+/*
+
+F = A.transpose() * B * C + D
+
+*/
+
 
 
 
@@ -98,7 +104,6 @@ using data_type = double;
 int main(int argc, char *argv[]) 
 {
     cublasHandle_t cublasH = NULL;
-    cudaStream_t stream = NULL;
 
 
 /* step 1: create cublas handle, bind a stream 
@@ -242,16 +247,16 @@ int main(int argc, char *argv[])
     Here we declare the pointers
 
     */
-    double *d_A = nullptr;
-    double *d_B = nullptr;
-    double *d_C = nullptr;
-    double *d_D = nullptr;
+    double* d_A = nullptr;
+    double* d_B = nullptr;
+    double* d_C = nullptr;
+    double* d_D = nullptr;
 
     //  The pointer to the solution of B * C
-    double *d_BC = nullptr;
+    double* d_BC = nullptr;
 
     //  The pointer for the solution of the linear equation which is done directly in cuda
-    double *d_F = nullptr;
+    double* d_F = nullptr;
 
 
 
@@ -326,7 +331,7 @@ int main(int argc, char *argv[])
 
     We use the function cublasDgemm which is composed of:
 
-    clublas : CUDA implementation of the blas library (Basic Linear Algebra Subprograms)
+    cublas : CUDA implementation of the blas library (Basic Linear Algebra Subprograms)
     D : we are using matrices of double (double floating point precision)
     gemm : there is not a clear definition. The way I see it is GEneral Matrix Multiplication
 
@@ -349,7 +354,7 @@ int main(int argc, char *argv[])
     */
     double alpha = 1.0;
     double beta = 0.0;
-    CUBLAS_CHECK(
+    CUBLAS_CHECK(       //  d_BC = d_B*d_C
         cublasDgemm(cublasH, CUBLAS_OP_N, CUBLAS_OP_N, rows_B, rows_C, cols_B, &alpha, d_B, ld_B, d_C, ld_C, &beta, d_BC, ld_BC)
     );
 
@@ -362,8 +367,13 @@ int main(int argc, char *argv[])
 
 
     beta = 1.0;
+    //  d_F <- D
+    //  d_F += d_A.transpose() * d_BC
+    //  d_F = d_A.transpose() * d_BC + d_F
+    auto rows_opA = cols_A;
+    auto cols_opA = rows_A;
     CUBLAS_CHECK( //    Pay attention here the rows of A.transpose() are the cols of A and vice versa
-        cublasDgemm(cublasH, CUBLAS_OP_T, CUBLAS_OP_N, cols_A, rows_BC, rows_A, &alpha, d_A, ld_A, d_BC, ld_BC, &beta, d_F, ld_F)
+        cublasDgemm(cublasH, CUBLAS_OP_T, CUBLAS_OP_N, rows_opA, rows_BC, cols_opA, &alpha, d_A, ld_A, d_BC, ld_BC, &beta, d_F, ld_F)
     );
 
 
