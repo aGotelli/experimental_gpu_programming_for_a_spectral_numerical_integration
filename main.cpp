@@ -230,8 +230,6 @@ Eigen::MatrixXd integrateInternalForces()
 
     Eigen::MatrixXd C_NN =  updateCMatrix(qe, D_NN);
 
-    //  Building N_bar
-    //const Eigen::Vector3d N_bar = Eigen::Vector3d::Zero();
 
     Eigen::VectorXd N_init(lambda_dimension/2);
     N_init << 1, 0, 0;
@@ -439,22 +437,20 @@ int main(int argc, char *argv[])
     std::cout << "Q_stack : \n" << Q_stack << std::endl;
 
 
-    // const auto r_stack = integratePosition();
-    // std::cout << "r_stack : \n" << r_stack << std::endl;
+    const auto r_stack = integratePosition();
+    std::cout << "r_stack : \n" << r_stack << std::endl;
 
-    // const auto N_stack = integrateInternalForces();
-    // std::cout << "N_stack : \n" << N_stack << "\n" << std::endl;
+    const auto N_stack = integrateInternalForces();
+    std::cout << "N_stack : \n" << N_stack << "\n" << std::endl;
 
-    // const auto C_stack = integrateInternalCouples();
-    // std::cout << "C_stack : \n" << C_stack << "\n" << std::endl;
+    const auto C_stack = integrateInternalCouples();
+    std::cout << "C_stack : \n" << C_stack << "\n" << std::endl;
 
+    const auto Lambda_stack = buildLambda(C_stack, N_stack);
+    std::cout << "Lambda_stack : \n" << Lambda_stack << "\n" << std::endl;
 
-    // const auto Lambda_stack = buildLambda(C_stack, N_stack);
-    // std::cout << "Lambda_stack : \n" << Lambda_stack << "\n" << std::endl;
-
-
-    // const auto Qa_stack = integrateGeneralisedForces(Lambda_stack);
-    // std::cout << "Qa_stack : \n" << Qa_stack << std::endl;
+    const auto Qa_stack = integrateGeneralisedForces(Lambda_stack);
+    std::cout << "Qa_stack : \n" << Qa_stack << std::endl;
 
 
 
