@@ -1,4 +1,4 @@
-﻿#include <cstdio>
+#include <cstdio>
 #include <cstdlib>
 #include <vector>
 
@@ -186,6 +186,7 @@ Eigen::VectorXd integrateQuaternions()
     cudaMemcpy(b.data(), d_b, size_of_b_in_bytes, cudaMemcpyDeviceToHost)
     );
 
+    std::cout << "res:\n"<< res<<std::endl;
 
     //Definition of matrices dimensions.
     const int rows_C_NN = C_NN.rows();
@@ -233,7 +234,7 @@ Eigen::VectorXd integrateQuaternions()
 
     // --> CNN*Qstack = b
     // Allocates buffer size for the LU decomposition
-    cusolverStatus_t status = cusolverDnDgetrf_bufferSize(cusolverH, rows_C_NN, cols_C_NN, d_C_NN, ld_C_NN, &lwork);
+    cusolverStatus_t status = cusolverDnDgetrf_bufferSize(cusolverH, rows_C_NN, cols_Q_stack, d_C_NN, ld_C_NN, &lwork);
     if (status != CUSOLVER_STATUS_SUCCESS)
     {
         std::cerr << "cusolver error: " << getCusolverErrorString(status) << std::endl;
@@ -849,8 +850,9 @@ Eigen::MatrixXd integrateInternalCouples()
     // Now, if im not mistken we should have res so let's compute C_stack
     // --> C_NN*C_stack = beta_NN
 
+
     // Allocates buffer size for the LU decomposition
-    cusolverStatus_t status = cusolverDnDgetrf_bufferSize(cusolverH, rows_C_NN, cols_C_NN, d_C_NN, ld_C_NN, &lwork);
+    cusolverStatus_t status = cusolverDnDgetrf_bufferSize(cusolverH, rows_res, cols_res, d_res, ld_res, &lwork);
     if (status != CUSOLVER_STATUS_SUCCESS)
     {
         std::cerr << "cusolver error: " << getCusolverErrorString(status) << std::endl;
@@ -1073,6 +1075,22 @@ Eigen::MatrixXd integrateGeneralisedForces(Eigen::MatrixXd t_Lambda_stack)
     CUDA_CHECK(
         cudaMemcpy(Qa_stack_CUDA.data(), d_B_NN, size_of_B_NN_in_bytes, cudaMemcpyDeviceToHost));
 
+        //FREEING MEMORY
+    CUDA_CHECK(
+        cudaFree(d_B_NN)
+    );
+    CUDA_CHECK(
+        cudaFree(d_info)
+    );
+    CUDA_CHECK(
+        cudaFree(d_Qa_stack)
+    );
+    CUDA_CHECK(
+        cudaFree(d_work)
+    );
+    CUDA_CHECK(
+        cudaFree(d_Dn_NN)
+    );
 
         //FREEING MEMORY
     CUDA_CHECK(
