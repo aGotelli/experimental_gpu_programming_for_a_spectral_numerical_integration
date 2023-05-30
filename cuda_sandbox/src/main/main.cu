@@ -192,8 +192,6 @@ Eigen::VectorXd integrateQuaternions()
     cudaMemcpy(b.data(), d_b, size_of_b_in_bytes, cudaMemcpyDeviceToHost)
     );
 
-    std::cout << "res:\n"<< res<<std::endl;
-
     //Definition of matrices dimensions.
     const int rows_C_NN = C_NN.rows();
     const int cols_C_NN = C_NN.cols();
@@ -304,7 +302,6 @@ Eigen::VectorXd integrateQuaternions()
 }
 
 
-
 // Used to build r_stack
 Eigen::MatrixXd updatePositionb(Eigen::MatrixXd t_Q_stack) {
 
@@ -335,14 +332,11 @@ Eigen::MatrixXd integratePosition()
               0;
 
     //  This matrix remains constant so we can pre invert
-     const auto Dn_NN_inv = Dn_NN_F.inverse();
-
-    //  Extract the submatrix responsible for propagating the initial conditions
-    const Eigen::MatrixXd Dn_IN = Dn.block<number_of_Chebyshev_points-1, 1>(0, number_of_Chebyshev_points-1);
+    Eigen::MatrixXd Dn_NN_inv = Dn_NN_F.inverse();
 
     Eigen::MatrixXd ivp(number_of_Chebyshev_points-1, position_dimension);
     for(unsigned int i=0; i<ivp.rows(); i++)
-        ivp.row(i) = Dn_IN(i, 0) * r_init.transpose();
+        ivp.row(i) = Dn_IN_F(i, 0) * r_init.transpose();
 
     const auto Q_stack_CUDA = integrateQuaternions();
     
@@ -395,7 +389,7 @@ Eigen::MatrixXd integratePosition()
 
     // Compute r_stack = Dn_NN_inv*res
     double alpha_cublas = 1.0;
-    double beta_cublas = 0;
+    double beta_cublas = 0.0;
     CUBLAS_CHECK(
         cublasDgemm(cublasH, CUBLAS_OP_N, CUBLAS_OP_N, rows_Dn_NN_inv, cols_res, cols_Dn_NN_inv, &alpha_cublas, d_Dn_NN_inv, ld_Dn_NN_inv, d_res, ld_res, &beta_cublas, d_r_stack, ld_r_stack)
     );
@@ -403,7 +397,7 @@ Eigen::MatrixXd integratePosition()
     Eigen::MatrixXd r_stack_CUDA(rows_r_stack, cols_r_stack);
 
     CUDA_CHECK(
-        cudaMemcpy(r_stack_CUDA.data(), d_r_stack, size_of_res_in_bytes, cudaMemcpyDeviceToHost));
+        cudaMemcpy(r_stack_CUDA.data(), d_r_stack, size_of_r_stack_in_bytes, cudaMemcpyDeviceToHost));
 
     //FREEING MEMORY
     CUDA_CHECK(
@@ -418,6 +412,8 @@ Eigen::MatrixXd integratePosition()
 
     return r_stack_CUDA;
 }
+
+
 
 // Used to build Lambda_stack:
 Eigen::MatrixXd updateCMatrix(const Eigen::VectorXd &t_qe, const Eigen::MatrixXd &D_NN)
@@ -719,7 +715,6 @@ Eigen::MatrixXd integrateInternalCouples()
     double* d_D_IN = nullptr;
     double* d_C_init = nullptr;
     double* d_beta_NN = nullptr;
-    double* d_res = nullptr;
     double* d_N_stack = nullptr;
     double* d_work = nullptr;
     int* d_info = nullptr;
@@ -784,7 +779,7 @@ Eigen::MatrixXd integrateInternalCouples()
 
 
     // Allocates buffer size for the LU decomposition
-    cusolverStatus_t status = cusolverDnDgetrf_bufferSize(cusolverH, rows_res, cols_res, d_res, ld_res, &lwork);
+    cusolverStatus_t status = cusolverDnDgetrf_bufferSize(cusolverH, rows_C_NN, cols_C_NN, d_C_NN, ld_C_NN, &lwork);
     if (status != CUSOLVER_STATUS_SUCCESS)
     {
         std::cerr << "cusolver error: " << getCusolverErrorString(status) << std::endl;
@@ -892,7 +887,6 @@ Eigen::MatrixXd updateQad_vector_b(Eigen::MatrixXd t_Lambda_stack)
     return B_NN;
 }
 
-
 Eigen::MatrixXd integrateGeneralisedForces(Eigen::MatrixXd t_Lambda_stack)
 {
 
@@ -903,14 +897,8 @@ Eigen::MatrixXd integrateGeneralisedForces(Eigen::MatrixXd t_Lambda_stack)
 
     Eigen::MatrixXd B_NN(number_of_Chebyshev_points-1, Qa_dimension);
 
-    //  Get the diffetentiation matrix
-    const Eigen::MatrixXd Dn = getDn<number_of_Chebyshev_points>();
-
-    //  Extract the submatrix responsible for the spectral integration
-    const Eigen::MatrixXd Dn_NN = Dn.block<number_of_Chebyshev_points-1, number_of_Chebyshev_points-1>(1, 1);
-
     // Dn_NN is constant so we can pre-invert
-    const Eigen::MatrixXd Dn_NN_inv = Dn_NN.inverse();
+    Eigen::MatrixXd Dn_NN_inv = Dn_NN_B.inverse();
 
     B_NN = updateQad_vector_b(t_Lambda_stack);
 
@@ -923,9 +911,7 @@ Eigen::MatrixXd integrateGeneralisedForces(Eigen::MatrixXd t_Lambda_stack)
     const int rows_Dn_NN_inv = Dn_NN_inv.rows();
     const int cols_Dn_NN_inv = Dn_NN_inv.cols();
     const int ld_Dn_NN_inv = rows_Dn_NN_inv;
-    const int rows_Dn_NN = Dn_NN_B.rows();
-    const int cols_Dn_NN = Dn_NN_B.cols();
-    const int ld_Dn_NN = rows_Dn_NN;
+
 
     const int rows_Qa_stack = rows_Dn_NN_inv;
     const int cols_Qa_stack = cols_B_NN;
@@ -958,12 +944,11 @@ Eigen::MatrixXd integrateGeneralisedForces(Eigen::MatrixXd t_Lambda_stack)
     );
     CUDA_CHECK(
         cudaMemcpy(d_Dn_NN_inv, Dn_NN_inv.data(), size_of_Dn_NN_inv_in_bytes, cudaMemcpyHostToDevice)
-        cudaMemcpy(d_Dn_NN, Dn_NN_B.data(), size_of_Dn_NN_in_bytes, cudaMemcpyHostToDevice)
     );
 
     // Compute Qa_stack = Dn_NN_inv*B_NN
     double alpha_cublas = 1.0;
-    double beta_cublas = 0;
+    double beta_cublas = 0.0;
     CUBLAS_CHECK(
         cublasDgemm(cublasH, CUBLAS_OP_N, CUBLAS_OP_N, rows_Dn_NN_inv, cols_B_NN, cols_Dn_NN_inv, &alpha_cublas, d_Dn_NN_inv, ld_Dn_NN_inv, d_B_NN, ld_B_NN, &beta_cublas, d_Qa_stack, ld_Qa_stack)
     );
@@ -982,23 +967,6 @@ Eigen::MatrixXd integrateGeneralisedForces(Eigen::MatrixXd t_Lambda_stack)
     );
     CUDA_CHECK(
         cudaFree(d_Dn_NN_inv)
-    );
-
-        //FREEING MEMORY
-    CUDA_CHECK(
-        cudaFree(d_B_NN)
-    );
-    CUDA_CHECK(
-        cudaFree(d_info)
-    );
-    CUDA_CHECK(
-        cudaFree(d_Qa_stack)
-    );
-    CUDA_CHECK(
-        cudaFree(d_work)
-    );
-    CUDA_CHECK(
-        cudaFree(d_Dn_NN)
     );
 
     return Qa_stack_CUDA;
