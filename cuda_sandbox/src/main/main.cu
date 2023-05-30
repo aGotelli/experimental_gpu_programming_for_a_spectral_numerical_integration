@@ -38,6 +38,19 @@ Eigen::Matrix<double, ne*na, 1> qe;
 //  Obtain the Chebyshev differentiation matrix
 const Eigen::MatrixXd Dn = getDn<number_of_Chebyshev_points>();
 
+//FORWARD INTEGRATION:
+//  Extract D_NN from the differentiation matrix (for the spectral integration)
+const Eigen::MatrixXd Dn_NN_F = Dn.block<number_of_Chebyshev_points-1, number_of_Chebyshev_points-1>(0, 0);
+//  Extract D_IN (for the propagation of initial conditions)
+const Eigen::MatrixXd Dn_IN_F = Dn.block<number_of_Chebyshev_points-1, 1>(0, number_of_Chebyshev_points-1);
+
+//BACKWARD INTEGRATION:
+//  Extract D_NN from the differentiation matrix (for the spectral integration)
+const Eigen::MatrixXd Dn_NN_B = Dn.block<number_of_Chebyshev_points-1, number_of_Chebyshev_points-1>(1, 1);
+//  Extract D_IN (for the propagation of initial conditions)
+const Eigen::MatrixXd Dn_IN_B = Dn.block<number_of_Chebyshev_points-1, 1>(1, 0);
+
+
 
 // CUDA specific variables
 const auto size_of_double = sizeof(double);
@@ -90,16 +103,9 @@ Eigen::MatrixXd computeCMatrix(const Eigen::VectorXd &t_qe, const Eigen::MatrixX
 
 Eigen::VectorXd integrateQuaternions()
 {
-    //  Extract D_NN from the differentiation matrix (for the spectral integration)
-    const Eigen::MatrixXd Dn_NN = Dn.block<number_of_Chebyshev_points-1, number_of_Chebyshev_points-1>(0, 0);
-
-    //  Extract D_IN (for the propagation of initial conditions)
-    const Eigen::MatrixXd Dn_IN = Dn.block<number_of_Chebyshev_points-1, 1>(0, number_of_Chebyshev_points-1);
-
-
     //  Now stack the matrices in the diagonal of bigger ones (as meny times as the state dimension)
-    const Eigen::MatrixXd D_NN = Eigen::KroneckerProduct<Eigen::MatrixXd,Eigen::MatrixXd>(Eigen::MatrixXd::Identity(quaternion_state_dimension, quaternion_state_dimension), Dn_NN);
-    const Eigen::MatrixXd D_IN = Eigen::KroneckerProduct<Eigen::MatrixXd,Eigen::MatrixXd>(Eigen::MatrixXd::Identity(quaternion_state_dimension, quaternion_state_dimension), Dn_IN);
+    const Eigen::MatrixXd D_NN = Eigen::KroneckerProduct<Eigen::MatrixXd,Eigen::MatrixXd>(Eigen::MatrixXd::Identity(quaternion_state_dimension, quaternion_state_dimension), Dn_NN_F);
+    const Eigen::MatrixXd D_IN = Eigen::KroneckerProduct<Eigen::MatrixXd,Eigen::MatrixXd>(Eigen::MatrixXd::Identity(quaternion_state_dimension, quaternion_state_dimension), Dn_IN_F);
 
     Eigen::MatrixXd C_NN =  computeCMatrix(qe, D_NN);
 
@@ -328,15 +334,8 @@ Eigen::MatrixXd integratePosition()
               0,
               0;
 
-
-    //  Get the diffetentiation matrix
-    const Eigen::MatrixXd Dn = getDn<number_of_Chebyshev_points>();
-
-    //  Extract the submatrix responsible for the spectral integration
-    const Eigen::MatrixXd Dn_NN = Dn.block<number_of_Chebyshev_points-1, number_of_Chebyshev_points-1>(0, 0);
-
     //  This matrix remains constant so we can pre invert
-     const auto Dn_NN_inv = Dn_NN.inverse();
+     const auto Dn_NN_inv = Dn_NN_F.inverse();
 
     //  Extract the submatrix responsible for propagating the initial conditions
     const Eigen::MatrixXd Dn_IN = Dn.block<number_of_Chebyshev_points-1, 1>(0, number_of_Chebyshev_points-1);
@@ -504,19 +503,9 @@ Eigen::MatrixXd updateCMatrix(const Eigen::VectorXd &t_qe, const Eigen::MatrixXd
 
 Eigen::MatrixXd integrateInternalForces()
 {   
-    //  Obtain the Chebyshev differentiation matrix
-    const Eigen::MatrixXd Dn = getDn<number_of_Chebyshev_points>();
-
-    //  Extract D_NN from the differentiation matrix (for the spectral integration)
-    const Eigen::MatrixXd Dn_NN = Dn.block<number_of_Chebyshev_points-1, number_of_Chebyshev_points-1>(1, 1);
-
-    //  Extract D_IN (for the propagation of initial conditions)
-    const Eigen::MatrixXd Dn_IN = Dn.block<number_of_Chebyshev_points-1, 1>(1, 0);
-
-
     //  Now stack the matrices in the diagonal of bigger ones (as meny times as the state dimension)
-    const Eigen::MatrixXd D_NN = Eigen::KroneckerProduct<Eigen::MatrixXd,Eigen::MatrixXd>(Eigen::MatrixXd::Identity(lambda_dimension/2, lambda_dimension/2), Dn_NN);
-    const Eigen::MatrixXd D_IN = Eigen::KroneckerProduct<Eigen::MatrixXd,Eigen::MatrixXd>(Eigen::MatrixXd::Identity(lambda_dimension/2, lambda_dimension/2), Dn_IN);
+    const Eigen::MatrixXd D_NN = Eigen::KroneckerProduct<Eigen::MatrixXd,Eigen::MatrixXd>(Eigen::MatrixXd::Identity(lambda_dimension/2, lambda_dimension/2), Dn_NN_B);
+    const Eigen::MatrixXd D_IN = Eigen::KroneckerProduct<Eigen::MatrixXd,Eigen::MatrixXd>(Eigen::MatrixXd::Identity(lambda_dimension/2, lambda_dimension/2), Dn_IN_B);
 
     Eigen::MatrixXd C_NN =  updateCMatrix(qe, D_NN);
 
@@ -718,19 +707,9 @@ Eigen::MatrixXd updateCouplesb(Eigen::MatrixXd t_N_stack) {
 
 Eigen::MatrixXd integrateInternalCouples()
 {
-    //  Obtain the Chebyshev differentiation matrix
-    const Eigen::MatrixXd Dn = getDn<number_of_Chebyshev_points>();
-
-    //  Extract D_NN from the differentiation matrix (for the spectral integration)
-    const Eigen::MatrixXd Dn_NN = Dn.block<number_of_Chebyshev_points-1, number_of_Chebyshev_points-1>(1, 1);
-
-    //  Extract D_IN (for the propagation of initial conditions)
-    const Eigen::MatrixXd Dn_IN = Dn.block<number_of_Chebyshev_points-1, 1>(1, 0);
-
-
     //  Now stack the matrices in the diagonal of bigger ones (as meny times as the state dimension)
-    const Eigen::MatrixXd D_NN = Eigen::KroneckerProduct<Eigen::MatrixXd,Eigen::MatrixXd>(Eigen::MatrixXd::Identity(lambda_dimension/2, lambda_dimension/2), Dn_NN); // Dimension: 45x45
-    const Eigen::MatrixXd D_IN = Eigen::KroneckerProduct<Eigen::MatrixXd,Eigen::MatrixXd>(Eigen::MatrixXd::Identity(lambda_dimension/2, lambda_dimension/2), Dn_IN); // Dimension: 45x3
+    const Eigen::MatrixXd D_NN = Eigen::KroneckerProduct<Eigen::MatrixXd,Eigen::MatrixXd>(Eigen::MatrixXd::Identity(lambda_dimension/2, lambda_dimension/2), Dn_NN_B); // Dimension: 45x45
+    const Eigen::MatrixXd D_IN = Eigen::KroneckerProduct<Eigen::MatrixXd,Eigen::MatrixXd>(Eigen::MatrixXd::Identity(lambda_dimension/2, lambda_dimension/2), Dn_IN_B); // Dimension: 45x3
 
     Eigen::MatrixXd C_NN =  updateCMatrix(qe, D_NN);
 
@@ -980,10 +959,6 @@ Eigen::MatrixXd integrateGeneralisedForces(Eigen::MatrixXd t_Lambda_stack)
 
     Eigen::MatrixXd B_NN(number_of_Chebyshev_points-1, Qa_dimension);
 
-
-    //  Get the diffetentiation matrix
-    const Eigen::MatrixXd Dn = getDn<number_of_Chebyshev_points>();
-
     //  Extract the submatrix responsible for the spectral integration
     const Eigen::MatrixXd Dn_NN = Dn.block<number_of_Chebyshev_points-1, number_of_Chebyshev_points-1>(1, 1);
 
@@ -996,8 +971,8 @@ Eigen::MatrixXd integrateGeneralisedForces(Eigen::MatrixXd t_Lambda_stack)
     const int cols_B_NN = B_NN.cols();
     const int ld_B_NN = rows_B_NN;
 
-    const int rows_Dn_NN = Dn_NN.rows();
-    const int cols_Dn_NN = Dn_NN.cols();
+    const int rows_Dn_NN = Dn_NN_B.rows();
+    const int cols_Dn_NN = Dn_NN_B.cols();
     const int ld_Dn_NN = rows_Dn_NN;
 
     const int rows_Qa_stack = rows_Dn_NN;
@@ -1041,7 +1016,7 @@ Eigen::MatrixXd integrateGeneralisedForces(Eigen::MatrixXd t_Lambda_stack)
         cudaMemcpy(d_B_NN, B_NN.data(), size_of_B_NN_in_bytes, cudaMemcpyHostToDevice)
     );
     CUDA_CHECK(
-        cudaMemcpy(d_Dn_NN, Dn_NN.data(), size_of_Dn_NN_in_bytes, cudaMemcpyHostToDevice)
+        cudaMemcpy(d_Dn_NN, Dn_NN_B.data(), size_of_Dn_NN_in_bytes, cudaMemcpyHostToDevice)
     );
     CUDA_CHECK(
         cudaMemcpy(d_info, &info, sizeof(int), cudaMemcpyHostToDevice)
@@ -1075,22 +1050,6 @@ Eigen::MatrixXd integrateGeneralisedForces(Eigen::MatrixXd t_Lambda_stack)
     CUDA_CHECK(
         cudaMemcpy(Qa_stack_CUDA.data(), d_B_NN, size_of_B_NN_in_bytes, cudaMemcpyDeviceToHost));
 
-        //FREEING MEMORY
-    CUDA_CHECK(
-        cudaFree(d_B_NN)
-    );
-    CUDA_CHECK(
-        cudaFree(d_info)
-    );
-    CUDA_CHECK(
-        cudaFree(d_Qa_stack)
-    );
-    CUDA_CHECK(
-        cudaFree(d_work)
-    );
-    CUDA_CHECK(
-        cudaFree(d_Dn_NN)
-    );
 
         //FREEING MEMORY
     CUDA_CHECK(
@@ -1108,7 +1067,6 @@ Eigen::MatrixXd integrateGeneralisedForces(Eigen::MatrixXd t_Lambda_stack)
     CUDA_CHECK(
         cudaFree(d_Dn_NN)
     );
-
 
     return Qa_stack_CUDA;
 }
