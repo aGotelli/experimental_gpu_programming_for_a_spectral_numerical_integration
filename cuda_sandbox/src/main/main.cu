@@ -1,4 +1,4 @@
-﻿#include <cstdio>
+#include <cstdio>
 #include <cstdlib>
 #include <vector>
 
@@ -344,57 +344,42 @@ Eigen::MatrixXd integratePosition()
     for(unsigned int i=0; i<ivp.rows(); i++)
         ivp.row(i) = Dn_IN(i, 0) * r_init.transpose();
 
-    // Giorgio: START (I've also added a few lines at the beginning of integratePosition() for the handlers declaration)
-
     const auto Q_stack_CUDA = integrateQuaternions();
     
-    //b_NN(number_of_Chebyshev_points-1, position_dimension);
     Eigen::MatrixXd b_NN = updatePositionb(Q_stack_CUDA);
 
-    // So here to compute r_stack = Dn_NN_inv*(b_NN - ivp) wet can also solve the system Dn_NN*r_stack=b_NN-ivp that is in the form: Ax=b. 
-    // The most convinient thing (even beacuse otherwise I wouldn't be able to do it) is to create a variable res=b_NN-ivp:
     Eigen::MatrixXd res = b_NN - ivp;
-    // We can also delete the variavle b_NN and write directly: res = updatePositionb(Q_stack_CUDA) - ivp >> It's up to you
 
-    // First of all some "standard" stuff:
-    const int rows_Dn_NN = Dn_NN.rows();
-    const int cols_Dn_NN = Dn_NN.cols();
-    const int ld_Dn_NN = rows_Dn_NN;  
+    // Define dimensions
+    const int rows_Dn_NN_inv = Dn_NN_inv.rows();
+    const int cols_Dn_NN_inv = Dn_NN_inv.cols();
+    const int ld_Dn_NN_inv = rows_Dn_NN_inv;  
 
     const int rows_res = res.rows();
     const int cols_res = res.cols();
     const int ld_res = rows_res;
 
-    const int rows_r_stack = rows_Dn_NN;
+    const int rows_r_stack = rows_Dn_NN_inv;
     const int cols_r_stack = cols_res;
     const int ld_r_stack = rows_r_stack;
 
-    int info = 0;
-    int lwork = 0;
-
-
     // Create Pointers
-    double* d_Dn_NN = nullptr;
-    double* d_b_NN = nullptr;
+    double* d_Dn_NN_inv = nullptr;
     double* d_res = nullptr;
     double* d_r_stack = nullptr;
-    double* d_work = nullptr;
-    int* d_info = nullptr;
+
     
     // Compute the memory occupation
-    const auto size_of_Dn_NN_in_bytes = size_of_double * Dn_NN.size();
+    const auto size_of_Dn_NN_inv_in_bytes = size_of_double * Dn_NN_inv.size();
     const auto size_of_res_in_bytes = size_of_double * res.size();
     const auto size_of_r_stack_in_bytes = size_of_double * rows_r_stack * cols_r_stack;
 
     // Allocate the memory
     CUDA_CHECK(
-        cudaMalloc(reinterpret_cast<void **>(&d_Dn_NN), size_of_Dn_NN_in_bytes)
+        cudaMalloc(reinterpret_cast<void **>(&d_Dn_NN_inv), size_of_Dn_NN_inv_in_bytes)
     );
     CUDA_CHECK(
         cudaMalloc(reinterpret_cast<void **>(&d_res), size_of_res_in_bytes)
-    );
-    CUDA_CHECK(
-        cudaMalloc(reinterpret_cast<void **>(&d_info), sizeof(int))
     );
         CUDA_CHECK(
         cudaMalloc(reinterpret_cast<void **>(&d_r_stack), size_of_r_stack_in_bytes)
@@ -402,53 +387,27 @@ Eigen::MatrixXd integratePosition()
     
     //  Copy the data: cudaMemcpy(destination, file_to_copy, size_of_the_file, std_cmd)
     CUDA_CHECK(
-        cudaMemcpy(d_Dn_NN, Dn_NN.data(), size_of_Dn_NN_in_bytes, cudaMemcpyHostToDevice)
+        cudaMemcpy(d_Dn_NN_inv, Dn_NN_inv.data(), size_of_Dn_NN_inv_in_bytes, cudaMemcpyHostToDevice)
     );
     CUDA_CHECK(
         cudaMemcpy(d_res, res.data(), size_of_res_in_bytes, cudaMemcpyHostToDevice)
     );
-    CUDA_CHECK(
-        cudaMemcpy(d_info, &info, sizeof(int), cudaMemcpyHostToDevice)
+
+    // Compute r_stack = Dn_NN_inv*res
+    double alpha_cublas = 1.0;
+    double beta_cublas = 0;
+    CUBLAS_CHECK(
+        cublasDgemm(cublasH, CUBLAS_OP_N, CUBLAS_OP_N, rows_Dn_NN_inv, cols_res, cols_Dn_NN_inv, &alpha_cublas, d_Dn_NN_inv, ld_Dn_NN_inv, d_res, ld_res, &beta_cublas, d_r_stack, ld_r_stack)
     );
-
-    // Allocates buffer size for the LU decomposition
-    cusolverStatus_t status = cusolverDnDgetrf_bufferSize(cusolverH, rows_Dn_NN, cols_Dn_NN, d_Dn_NN, ld_Dn_NN, &lwork);
-    if (status != CUSOLVER_STATUS_SUCCESS)
-    {
-        std::cerr << "cusolver error: " << getCusolverErrorString(status) << std::endl;
-        // Handle or debug the error appropriately
-    };
-
-    //Has to be after cusolverDnDgetrf_bufferSize as lwork is only computed then.
-    CUDA_CHECK(
-        cudaMalloc(reinterpret_cast<void **>(&d_work), size_of_double * lwork)
-    );
-
-    // LU factorization
-    CUSOLVER_CHECK(
-        cusolverDnDgetrf(cusolverH, rows_Dn_NN, cols_Dn_NN, d_Dn_NN, ld_Dn_NN, d_work, NULL, d_info));
-
-    // Solving the final system
-    CUSOLVER_CHECK(
-        cusolverDnDgetrs(cusolverH, CUBLAS_OP_N, rows_Dn_NN, 1, d_Dn_NN, ld_Dn_NN, NULL, d_res, ld_res, d_info));
-
     // Variable to check the result
     Eigen::MatrixXd r_stack_CUDA(rows_r_stack, cols_r_stack);
 
     CUDA_CHECK(
-        cudaMemcpy(r_stack_CUDA.data(), d_res, size_of_res_in_bytes, cudaMemcpyDeviceToHost));
-
-
+        cudaMemcpy(r_stack_CUDA.data(), d_r_stack, size_of_res_in_bytes, cudaMemcpyDeviceToHost));
 
     //FREEING MEMORY
     CUDA_CHECK(
-        cudaFree(d_b_NN)
-    );
-    CUDA_CHECK(
-        cudaFree(d_Dn_NN)
-    );
-    CUDA_CHECK(
-        cudaFree(d_info)
+        cudaFree(d_Dn_NN_inv)
     );
     CUDA_CHECK(
         cudaFree(d_r_stack)
@@ -456,15 +415,9 @@ Eigen::MatrixXd integratePosition()
     CUDA_CHECK(
         cudaFree(d_res)
     );
-    CUDA_CHECK(
-        cudaFree(d_work)
-    );
-
 
     return r_stack_CUDA;
 }
-
-
 
 // Used to build Lambda_stack:
 Eigen::MatrixXd updateCMatrix(const Eigen::VectorXd &t_qe, const Eigen::MatrixXd &D_NN)
@@ -915,8 +868,6 @@ Eigen::MatrixXd buildLambda(Eigen::MatrixXd t_C_stack, Eigen::MatrixXd t_N_stack
 }
 
 
-
-
 // Used to build Qa_stack
 Eigen::MatrixXd updateQad_vector_b(Eigen::MatrixXd t_Lambda_stack)
 {
@@ -950,49 +901,44 @@ Eigen::MatrixXd integrateGeneralisedForces(Eigen::MatrixXd t_Lambda_stack)
                0,
                0;
 
-//  Extract the submatrix responsible for propagating the initial conditions
-//    const Eigen::MatrixXd Dn_IN = Dn.block<number_of_Chebyshev_points-1, 1>(0, number_of_Chebyshev_points-1);
-
-//    Eigen::MatrixXd ivp(number_of_Chebyshev_points-1, position_dimension);
-//    for(unsigned int i=0; i<ivp.rows(); i++)
-//        ivp.row(i) = Dn_IN(i, 0) * r_init.transpose();
-
     Eigen::MatrixXd B_NN(number_of_Chebyshev_points-1, Qa_dimension);
+
+    //  Get the diffetentiation matrix
+    const Eigen::MatrixXd Dn = getDn<number_of_Chebyshev_points>();
 
     //  Extract the submatrix responsible for the spectral integration
     const Eigen::MatrixXd Dn_NN = Dn.block<number_of_Chebyshev_points-1, number_of_Chebyshev_points-1>(1, 1);
 
+    // Dn_NN is constant so we can pre-invert
+    const Eigen::MatrixXd Dn_NN_inv = Dn_NN.inverse();
+
     B_NN = updateQad_vector_b(t_Lambda_stack);
 
-    // Giorgio: START
-    // Here there is a few to do: Dn_NN*Qa_stack = B_NN so we have to simply solve the system
+    // Qa_stack = B_NN*Dn_NN_inv
     //Definition of matrices dimensions.
     const int rows_B_NN = B_NN.rows();
     const int cols_B_NN = B_NN.cols();
     const int ld_B_NN = rows_B_NN;
 
+    const int rows_Dn_NN_inv = Dn_NN_inv.rows();
+    const int cols_Dn_NN_inv = Dn_NN_inv.cols();
+    const int ld_Dn_NN_inv = rows_Dn_NN_inv;
     const int rows_Dn_NN = Dn_NN_B.rows();
     const int cols_Dn_NN = Dn_NN_B.cols();
     const int ld_Dn_NN = rows_Dn_NN;
 
-    const int rows_Qa_stack = rows_Dn_NN;
+    const int rows_Qa_stack = rows_Dn_NN_inv;
     const int cols_Qa_stack = cols_B_NN;
     const int ld_Qa_stack = rows_Qa_stack;
 
-    int info = 0;
-    int lwork = 0;
-
-
     // Create Pointers
     double* d_B_NN = nullptr;
-    double* d_Dn_NN = nullptr;    
+    double* d_Dn_NN_inv = nullptr;    
     double* d_Qa_stack = nullptr;
-    double* d_work = nullptr;
-    int* d_info = nullptr;
 
     // Compute the memory occupation
     const auto size_of_B_NN_in_bytes = size_of_double * B_NN.size();
-    const auto size_of_Dn_NN_in_bytes = size_of_double * Dn_NN.size();
+    const auto size_of_Dn_NN_inv_in_bytes = size_of_double * Dn_NN_inv.size();
     const auto size_of_Qa_stack_in_bytes = size_of_double * rows_Qa_stack * cols_Qa_stack;
 
     // Allocate the memory
@@ -1000,56 +946,43 @@ Eigen::MatrixXd integrateGeneralisedForces(Eigen::MatrixXd t_Lambda_stack)
         cudaMalloc(reinterpret_cast<void **>(&d_B_NN), size_of_B_NN_in_bytes)
     );
     CUDA_CHECK(
-        cudaMalloc(reinterpret_cast<void **>(&d_Dn_NN), size_of_Dn_NN_in_bytes)
+        cudaMalloc(reinterpret_cast<void **>(&d_Dn_NN_inv), size_of_Dn_NN_inv_in_bytes)
     );
     CUDA_CHECK(
         cudaMalloc(reinterpret_cast<void **>(&d_Qa_stack), size_of_Qa_stack_in_bytes)
     );
-    CUDA_CHECK(
-        cudaMalloc(reinterpret_cast<void **>(&d_info), sizeof(int))
-    );
-    
-
 
     //  Copy the data: cudaMemcpy(destination, file_to_copy, size_of_the_file, std_cmd)
     CUDA_CHECK(
         cudaMemcpy(d_B_NN, B_NN.data(), size_of_B_NN_in_bytes, cudaMemcpyHostToDevice)
     );
     CUDA_CHECK(
+        cudaMemcpy(d_Dn_NN_inv, Dn_NN_inv.data(), size_of_Dn_NN_inv_in_bytes, cudaMemcpyHostToDevice)
         cudaMemcpy(d_Dn_NN, Dn_NN_B.data(), size_of_Dn_NN_in_bytes, cudaMemcpyHostToDevice)
     );
-    CUDA_CHECK(
-        cudaMemcpy(d_info, &info, sizeof(int), cudaMemcpyHostToDevice)
+
+    // Compute Qa_stack = Dn_NN_inv*B_NN
+    double alpha_cublas = 1.0;
+    double beta_cublas = 0;
+    CUBLAS_CHECK(
+        cublasDgemm(cublasH, CUBLAS_OP_N, CUBLAS_OP_N, rows_Dn_NN_inv, cols_B_NN, cols_Dn_NN_inv, &alpha_cublas, d_Dn_NN_inv, ld_Dn_NN_inv, d_B_NN, ld_B_NN, &beta_cublas, d_Qa_stack, ld_Qa_stack)
     );
+    // Variable to check the result
+    Eigen::MatrixXd Qa_stack_CUDA(rows_Qa_stack, cols_Qa_stack);
 
-    // --> Dn_NN*Qa_stack = B_NN
-    // Allocates buffer size for the LU decomposition
-    cusolverStatus_t status = cusolverDnDgetrf_bufferSize(cusolverH, rows_Dn_NN, cols_Dn_NN, d_Dn_NN, ld_Dn_NN, &lwork);
-    if (status != CUSOLVER_STATUS_SUCCESS)
-    {
-        std::cerr << "cusolver error: " << getCusolverErrorString(status) << std::endl;
-        // Handle or debug the error appropriately
-    };
-
-
-    //Has to be after cusolverDnDgetrf_bufferSize as lwork is only computed then.
     CUDA_CHECK(
-        cudaMalloc(reinterpret_cast<void **>(&d_work), size_of_double * lwork)
+        cudaMemcpy(Qa_stack_CUDA.data(), d_Qa_stack, size_of_Qa_stack_in_bytes, cudaMemcpyDeviceToHost));
+
+        //FREEING MEMORY
+    CUDA_CHECK(
+        cudaFree(d_B_NN)
     );
-
-    // LU factorization
-    CUSOLVER_CHECK(
-        cusolverDnDgetrf(cusolverH, rows_Dn_NN, cols_Dn_NN, d_Dn_NN, ld_Dn_NN, d_work, NULL, d_info));
-
-    // Solving the final system
-    CUSOLVER_CHECK(
-        cusolverDnDgetrs(cusolverH, CUBLAS_OP_N, rows_Dn_NN, 1, d_Dn_NN, ld_Dn_NN, NULL, d_B_NN, ld_B_NN, d_info));
-
-    //What we want to calculate
-    Eigen::MatrixXd Qa_stack_CUDA = Eigen::MatrixXd::Zero(rows_Qa_stack, cols_Qa_stack);
     CUDA_CHECK(
-        cudaMemcpy(Qa_stack_CUDA.data(), d_B_NN, size_of_B_NN_in_bytes, cudaMemcpyDeviceToHost));
-
+        cudaFree(d_Qa_stack)
+    );
+    CUDA_CHECK(
+        cudaFree(d_Dn_NN_inv)
+    );
 
         //FREEING MEMORY
     CUDA_CHECK(
