@@ -1,4 +1,4 @@
-#include <cstdio>
+﻿#include <cstdio>
 #include <cstdlib>
 #include <vector>
 
@@ -34,6 +34,9 @@ static const unsigned int Qa_dimension = 9;
 // static constexpr unsigned int na = 3;
 
 Eigen::Matrix<double, ne*na, 1> qe;
+
+//  Obtain the Chebyshev differentiation matrix
+const Eigen::MatrixXd Dn = getDn<number_of_Chebyshev_points>();
 
 
 // CUDA specific variables
@@ -87,9 +90,6 @@ Eigen::MatrixXd computeCMatrix(const Eigen::VectorXd &t_qe, const Eigen::MatrixX
 
 Eigen::VectorXd integrateQuaternions()
 {
-    //  Obtain the Chebyshev differentiation matrix
-    const Eigen::MatrixXd Dn = getDn<number_of_Chebyshev_points>();
-
     //  Extract D_NN from the differentiation matrix (for the spectral integration)
     const Eigen::MatrixXd Dn_NN = Dn.block<number_of_Chebyshev_points-1, number_of_Chebyshev_points-1>(0, 0);
 
