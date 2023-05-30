@@ -113,7 +113,7 @@ Eigen::VectorXd integrateQuaternions()
     Eigen::MatrixXd q_init(4,1);
     q_init << 1, 0, 0, 0;
 
-    // Giorgio: START - 
+    // Giorgio: START 
     Eigen::MatrixXd b = Eigen::MatrixXd::Zero(quaternion_problem_dimension,1);
 
     // HOLA! Here I don't know if the .rows() and .cols() is compatible with the VectorXd type. If it's not, change it 
@@ -452,20 +452,8 @@ Eigen::MatrixXd updateCMatrix(const Eigen::VectorXd &t_qe, const Eigen::MatrixXd
 
 }
 
-Eigen::MatrixXd integrateInternalForces()
-{   
-    //  Now stack the matrices in the diagonal of bigger ones (as meny times as the state dimension)
-    const Eigen::MatrixXd D_NN = Eigen::KroneckerProduct<Eigen::MatrixXd,Eigen::MatrixXd>(Eigen::MatrixXd::Identity(lambda_dimension/2, lambda_dimension/2), Dn_NN_B);
-    const Eigen::MatrixXd D_IN = Eigen::KroneckerProduct<Eigen::MatrixXd,Eigen::MatrixXd>(Eigen::MatrixXd::Identity(lambda_dimension/2, lambda_dimension/2), Dn_IN_B);
-
-    Eigen::MatrixXd C_NN =  updateCMatrix(qe, D_NN);
-
-
-    Eigen::VectorXd N_init(lambda_dimension/2);
-    N_init << 1, 0, 0;
-
-    Eigen::MatrixXd beta((lambda_dimension/2)*(number_of_Chebyshev_points-1) , 1);
-
+Eigen::VectorXd computeNbar () 
+{
     // Variables definition to include gravity (Nbar)
     const double g = 9.81; // m/s^2
     const double radius = 0.001; // m
@@ -482,7 +470,7 @@ Eigen::MatrixXd integrateInternalForces()
 
     for (unsigned int i = 0; i < number_of_Chebyshev_points-1; ++i) {
 
-            Eigen::Quaterniond Qbar(Q_stack.block<quaternion_state_dimension,1>(i*quaternion_state_dimension,0));
+        Eigen::Quaterniond Qbar(Q_stack.block<quaternion_state_dimension,1>(i*quaternion_state_dimension,0));
         
         R = Qbar.toRotationMatrix();
         Nbar = R.transpose()*Fg;
@@ -490,7 +478,22 @@ Eigen::MatrixXd integrateInternalForces()
         Nbar_stack.block<lambda_dimension/2,1>(i*lambda_dimension,0) = Nbar;
     }
 
-    std::cout << "Nbar_stack \n" << Nbar_stack << std::endl;
+    return Nbar_stack;
+
+}
+
+Eigen::MatrixXd integrateInternalForces()
+{   
+    //  Now stack the matrices in the diagonal of bigger ones (as meny times as the state dimension)
+    const Eigen::MatrixXd D_NN = Eigen::KroneckerProduct<Eigen::MatrixXd,Eigen::MatrixXd>(Eigen::MatrixXd::Identity(lambda_dimension/2, lambda_dimension/2), Dn_NN_B);
+    const Eigen::MatrixXd D_IN = Eigen::KroneckerProduct<Eigen::MatrixXd,Eigen::MatrixXd>(Eigen::MatrixXd::Identity(lambda_dimension/2, lambda_dimension/2), Dn_IN_B);
+
+    Eigen::MatrixXd C_NN =  updateCMatrix(qe, D_NN);
+
+    Eigen::VectorXd N_init(lambda_dimension/2);
+    N_init << 1, 0, 0;
+
+    Eigen::MatrixXd beta((lambda_dimension/2)*(number_of_Chebyshev_points-1) , 1) = computeNbar();
 
     //Definition of matrices dimensions.
     const int rows_C_NN = C_NN.rows();
