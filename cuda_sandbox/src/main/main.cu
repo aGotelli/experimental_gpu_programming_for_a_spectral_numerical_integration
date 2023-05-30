@@ -3,6 +3,7 @@
 #include <vector>
 
 #include <fstream>
+#include <cmath>
 
 //  CUDQ Basic Linear Algebra 
 #include <cublas_v2.h>
@@ -466,29 +467,30 @@ Eigen::MatrixXd integrateInternalForces()
     Eigen::MatrixXd beta((lambda_dimension/2)*(number_of_Chebyshev_points-1) , 1);
 
     // Variables definition to include gravity (Nbar)
-    const double g = 9.81 // m/s^2
-    const double radius = 0.001 // m
-    const double A = 3.14*radius^2;
-    const double rho = 7800 // kg/m^3
+    const double g = 9.81; // m/s^2
+    const double radius = 0.001; // m
+    const double A = M_PI*radius*radius;
+    const double rho = 7800; // kg/m^3
 
     Eigen::VectorXd Fg(lambda_dimension/2);
     Fg << 0, 0, A*g*rho;
     
     Eigen::VectorXd Q_stack = integrateQuaternions();
-    Eigen::Quaterniond Qbar; 
     Eigen::Matrix3d R;
     Eigen::VectorXd Nbar(lambda_dimension/2);
     Eigen::VectorXd Nbar_stack((lambda_dimension/2)*(number_of_Chebyshev_points-1));
 
     for (unsigned int i = 0; i < number_of_Chebyshev_points-1; ++i) {
 
-        Qbar(Q_stack.block<quaternion_state_dimension,1>(i*quaternion_state_dimension,0));
+            Eigen::Quaterniond Qbar(Q_stack.block<quaternion_state_dimension,1>(i*quaternion_state_dimension,0));
         
         R = Qbar.toRotationMatrix();
         Nbar = R.transpose()*Fg;
 
         Nbar_stack.block<lambda_dimension/2,1>(i*lambda_dimension,0) = Nbar;
     }
+
+    std::cout << "Nbar_stack \n" << Nbar_stack << std::endl;
 
     //Definition of matrices dimensions.
     const int rows_C_NN = C_NN.rows();
@@ -695,10 +697,6 @@ Eigen::MatrixXd integrateInternalCouples()
     C_init << 1, 0, 0;
 
 
-    Eigen::MatrixXd beta_NN_CPU = -D_IN*C_init + beta_NN;
-    Eigen::VectorXd C_stack_CPU = C_NN.inverse() * beta_NN_CPU;
-
-
     // Giorgio: START
     // Again, the system to solve is: C_NN*C_stack = res that is in the form Ax=b. I'll do everthing I did before:
     // Before to do that we have to compute res = beta_NN - D_IN*C_init. It can be done with cublasDgemm
@@ -852,7 +850,6 @@ Eigen::MatrixXd integrateInternalCouples()
         cudaFree(d_work)
     );
 
-    std::cout<<"C stack CPU \n:"<<C_stack_CPU<<std::endl;
     return C_stack_CUDA;
 }
 
@@ -1051,7 +1048,6 @@ int main(int argc, char *argv[])
     const auto Q_stack = integrateQuaternions();
     std::cout << "Q_stack : \n" << Q_stack << std::endl;
     
-
     const auto r_stack = integratePosition();
     std::cout << "r_stack : \n" << r_stack << std::endl;
 
