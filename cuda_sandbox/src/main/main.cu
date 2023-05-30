@@ -474,6 +474,22 @@ Eigen::MatrixXd integrateInternalForces()
     Eigen::VectorXd Fg(lambda_dimension/2);
     Fg << 0, 0, A*g*rho;
     
+    Eigen::VectorXd Q_stack = integrateQuaternions();
+    Eigen::Quaterniond Qbar; 
+    Eigen::Matrix3d R;
+    Eigen::VectorXd Nbar(lambda_dimension/2);
+    Eigen::VectorXd Nbar_stack((lambda_dimension/2)*(number_of_Chebyshev_points-1));
+
+    for (unsigned int i = 0; i < number_of_Chebyshev_points-1; ++i) {
+
+        Qbar(Q_stack.block<quaternion_state_dimension,1>(i*quaternion_state_dimension,0));
+        
+        R = Qbar.toRotationMatrix();
+        Nbar = R.transpose()*Fg;
+
+        Nbar_stack.block<lambda_dimension/2,1>(i*lambda_dimension,0) = Nbar;
+    }
+
     //Definition of matrices dimensions.
     const int rows_C_NN = C_NN.rows();
     const int cols_C_NN = C_NN.cols();
@@ -1034,6 +1050,7 @@ int main(int argc, char *argv[])
 
     const auto Q_stack = integrateQuaternions();
     std::cout << "Q_stack : \n" << Q_stack << std::endl;
+    
 
     const auto r_stack = integratePosition();
     std::cout << "r_stack : \n" << r_stack << std::endl;
