@@ -302,6 +302,7 @@ Eigen::VectorXd integrateQuaternions()
 }
 
 
+
 // Used to build r_stack
 Eigen::MatrixXd updatePositionb(Eigen::MatrixXd t_Q_stack) {
 
@@ -464,11 +465,15 @@ Eigen::MatrixXd integrateInternalForces()
 
     Eigen::MatrixXd beta((lambda_dimension/2)*(number_of_Chebyshev_points-1) , 1);
 
-    // Giorgio: START
-    // Again, the system to solve is: C_NN*N_stack = res that is in the form Ax=b. I'll do everthing I did before:
-    // Before to do that we have to compute res = beta - D_IN*N_init. It can be done with cublasDgemm
-    
+    // Variables definition to include gravity (Nbar)
+    const double g = 9.81 // m/s^2
+    const double radius = 0.001 // m
+    const double A = 3.14*radius^2;
+    const double rho = 7800 // kg/m^3
 
+    Eigen::VectorXd Fg(lambda_dimension/2);
+    Fg << 0, 0, A*g*rho;
+    
     //Definition of matrices dimensions.
     const int rows_C_NN = C_NN.rows();
     const int cols_C_NN = C_NN.cols();
@@ -861,6 +866,7 @@ Eigen::MatrixXd buildLambda(Eigen::MatrixXd t_C_stack, Eigen::MatrixXd t_N_stack
 
     return Lambda_stack;
 }
+
 
 
 // Used to build Qa_stack
