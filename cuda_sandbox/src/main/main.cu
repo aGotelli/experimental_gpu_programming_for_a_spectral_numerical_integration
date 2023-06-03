@@ -5,7 +5,7 @@
 #include <fstream>
 #include <cmath>
 
-//  CUDQ Basic Linear Algebra 
+//  CUDA Basic Linear Algebra 
 #include <cublas_v2.h>
 // // #include <cuda_runtime.h>
 
@@ -461,21 +461,29 @@ Eigen::VectorXd computeNbar ()
     const double rho = 7800; // kg/m^3
 
     Eigen::VectorXd Fg(lambda_dimension/2);
-    Fg << 0, 0, A*g*rho;
+    Fg << 0, 0, -A*g*rho;
     
-    Eigen::VectorXd Q_stack = integrateQuaternions();
+    Eigen::VectorXd t_Q_stack = integrateQuaternions();
     Eigen::Matrix3d R;
     Eigen::VectorXd Nbar(lambda_dimension/2);
-    Eigen::VectorXd Nbar_stack((lambda_dimension/2)*(number_of_Chebyshev_points-1));
+    Eigen::VectorXd Nbar_stack = Eigen::VectorXd::Zero((lambda_dimension/2)*(number_of_Chebyshev_points-1));
 
+    // to fix
     for (unsigned int i = 0; i < number_of_Chebyshev_points-1; ++i) {
 
-        Eigen::Quaterniond Qbar(Q_stack.block<quaternion_state_dimension,1>(i*quaternion_state_dimension,0));
+        Eigen::Quaterniond Qbar(t_Q_stack(i),
+              t_Q_stack(i  +  (number_of_Chebyshev_points-1)),
+              t_Q_stack(i + 2*(number_of_Chebyshev_points-1)),
+              t_Q_stack(i + 3*(number_of_Chebyshev_points-1)));
+
         
         R = Qbar.toRotationMatrix();
         Nbar = R.transpose()*Fg;
 
-        Nbar_stack.block<lambda_dimension/2,1>(i*lambda_dimension,0) = Nbar;
+        Nbar_stack(i) = Nbar.x();
+        Nbar_stack(i  +  (number_of_Chebyshev_points-1)) = Nbar.y();
+        Nbar_stack(i + 2*(number_of_Chebyshev_points-1)) = Nbar.z();
+
     }
 
     return Nbar_stack;
@@ -491,9 +499,9 @@ Eigen::MatrixXd integrateInternalForces()
     Eigen::MatrixXd C_NN =  updateCMatrix(qe, D_NN);
 
     Eigen::VectorXd N_init(lambda_dimension/2);
-    N_init << 1, 0, 0;
+    N_init << 0, 0, 0;
 
-    Eigen::MatrixXd beta((lambda_dimension/2)*(number_of_Chebyshev_points-1) , 1) = computeNbar();
+    Eigen::MatrixXd beta = -computeNbar();
 
     //Definition of matrices dimensions.
     const int rows_C_NN = C_NN.rows();
@@ -697,7 +705,7 @@ Eigen::MatrixXd integrateInternalCouples()
 
 
     Eigen::VectorXd C_init(lambda_dimension/2);
-    C_init << 1, 0, 0;
+    C_init << 0, 0, 0;
 
 
     // Giorgio: START
@@ -1037,7 +1045,6 @@ int main(int argc, char *argv[])
 
 
     //  Here we give some value for the strain
-//    qe.setZero();
     qe <<   0,
             0,
             0,
@@ -1047,6 +1054,8 @@ int main(int argc, char *argv[])
             0,
             0,
             0;
+    qe.setZero();
+    
 
     const auto Q_stack = integrateQuaternions();
     std::cout << "Q_stack : \n" << Q_stack << std::endl;
